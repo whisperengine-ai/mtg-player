@@ -212,24 +212,44 @@ def play_game(game_state, rules_engine, max_full_turns=10, verbose=True, use_llm
             game_state.turn_number,
         )
 
-        # Get agent and try one decision
+        # Get agent and let them take actions until phase changes or they pass
         agent = agents[active_player.id]
+        max_actions_per_phase = 20  # Prevent infinite loops
+        actions_taken = 0
+        
         try:
-            agent.take_turn_action()
+            while actions_taken < max_actions_per_phase:
+                # Take one action
+                agent.take_turn_action()
+                actions_taken += 1
+                
+                # Check if phase/step changed
+                post_snapshot = (
+                    game_state.current_phase,
+                    game_state.current_step,
+                    game_state.active_player_id,
+                    game_state.turn_number,
+                )
+                
+                # If phase changed, break out of action loop
+                if post_snapshot != prev_snapshot:
+                    game_logger.log_phase_change(
+                        old_phase=prev_snapshot[0].value,
+                        old_step=prev_snapshot[1].value,
+                        new_phase=post_snapshot[0].value,
+                        new_step=post_snapshot[1].value
+                    )
+                    break
+                    
         except Exception as e:
             if verbose:
                 print(f"❌ Error during turn: {e}")
             game_logger.log_error(f"Turn error for {active_player.name}: {e}")
         
-        # If nothing changed (no pass/advance), force an advance to keep game moving
-        post_snapshot = (
-            game_state.current_phase,
-            game_state.current_step,
-            game_state.active_player_id,
-            game_state.turn_number,
-        )
-        if post_snapshot == prev_snapshot:
-            # Log forced phase advance
+        # If too many actions without advancing, force advance to prevent infinite loop
+        if actions_taken >= max_actions_per_phase:
+            if verbose:
+                print(f"⚠️  Warning: Forcing phase advance after {actions_taken} actions")
             game_logger.log_phase_change(
                 old_phase=game_state.current_phase.value,
                 old_step=game_state.current_step.value,
@@ -237,14 +257,6 @@ def play_game(game_state, rules_engine, max_full_turns=10, verbose=True, use_llm
                 new_step="forced"
             )
             rules_engine.advance_phase()
-        elif post_snapshot != prev_snapshot:
-            # Phase changed naturally
-            game_logger.log_phase_change(
-                old_phase=prev_snapshot[0].value,
-                old_step=prev_snapshot[1].value,
-                new_phase=post_snapshot[0].value,
-                new_step=post_snapshot[1].value
-            )
 
         # Check win conditions after each step
         game_state.check_win_condition()

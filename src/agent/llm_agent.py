@@ -846,18 +846,44 @@ class MTGAgent:
         return {"type": "pass", "reasoning": "Holding instant-speed spells"}
     
     def _can_afford(self, action: Dict[str, Any], player) -> bool:
-        """Check if player can afford to cast this spell."""
+        """Check if player can afford to cast this spell with proper color requirements."""
         cost_str = action.get("cost", "")
         if not cost_str:
             return True
         
-        # Simple heuristic: count generic mana cost
-        generic_cost = sum(int(c) for c in cost_str if c.isdigit())
-        colored_cost = sum(1 for c in cost_str if c.isalpha())
-        total_cost = generic_cost + colored_cost
+        # Parse cost string like "{2}{W}{U}" → 2 generic, 1 white, 1 blue
+        import re
         
-        available = player.available_mana().total()
-        return available >= total_cost
+        # Extract numbers (generic mana)
+        generic_cost = sum(int(n) for n in re.findall(r'\d+', cost_str))
+        
+        # Extract colored mana symbols
+        white_cost = cost_str.count('{W}') + cost_str.count('W')
+        blue_cost = cost_str.count('{U}') + cost_str.count('U')
+        black_cost = cost_str.count('{B}') + cost_str.count('B')
+        red_cost = cost_str.count('{R}') + cost_str.count('R')
+        green_cost = cost_str.count('{G}') + cost_str.count('G')
+        
+        # Get available mana
+        available = player.available_mana()
+        
+        # Check colored requirements
+        if white_cost > available.white:
+            return False
+        if blue_cost > available.blue:
+            return False
+        if black_cost > available.black:
+            return False
+        if red_cost > available.red:
+            return False
+        if green_cost > available.green:
+            return False
+        
+        # Check total mana (generic can be paid with any color)
+        total_colored = white_cost + blue_cost + black_cost + red_cost + green_cost
+        total_cost = generic_cost + total_colored
+        
+        return available.total() >= total_cost
     
     def _mana_cost_value(self, cost_str: str) -> int:
         """Convert mana cost string to numeric value for comparison."""
