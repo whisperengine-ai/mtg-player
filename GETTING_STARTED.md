@@ -1,153 +1,520 @@
-# 🎯 Getting Started Checklist
+# 🎯 Getting Started: Your Journey into Agentic AI
 
-Your step-by-step guide to understanding and running the MTG Commander AI!
+Welcome! This guide is designed for developers who have used LLMs for basic text generation (like "write me a poem") but haven't yet built **agentic AI systems** that can take actions and use tools.
 
----
+**By the end of this guide, you will:**
+- ✅ Understand what "agentic AI" means
+- ✅ Know how to use function calling / tool use
+- ✅ Build confidence with structured AI systems
+- ✅ Make your first contribution to the codebase
 
-## ✅ Phase 1: Understanding (15 minutes)
-
-### Read These First (in order):
-- [ ] **README.md** (5 min) - Get the big picture
-- [ ] **PROJECT_SUMMARY.md** (5 min) - Understand what's included
-- [ ] **ARCHITECTURE.md** (5 min) - See how it works
-
-### Quick Understanding Check:
-- [ ] Can you explain what "agentic AI" means?
-- [ ] Do you understand why we use tools instead of fine-tuning?
-- [ ] Can you name the three main layers of the architecture?
+**Estimated time:** 90 minutes (broken into phases)
 
 ---
 
-## ✅ Phase 2: Setup (10 minutes)
+## 📖 What You're About to Learn
 
-### Installation Steps:
-- [ ] Open terminal in `/Users/markcastillo/git/mtg-player`
-- [ ] Create virtual environment: `python3 -m venv venv`
-- [ ] Activate it: `source venv/bin/activate`
-- [ ] Install dependencies: `pip install -r requirements.txt`
-- [ ] Verify installation: `python -c "import pydantic; print('OK')"`
+### From Basic Prompting to Agentic AI
 
-### Verify Setup:
-- [ ] Run tests: `pytest` (should pass)
-- [ ] Check file structure: `ls -la src/`
-
----
-
-## ✅ Phase 3: First Run (5 minutes)
-
-### Run the Game:
-- [ ] Basic run: `python src/main.py`
-- [ ] Verbose run: `python src/main.py --verbose`
-- [ ] Watch a complete game play out
-
-### Observe:
-- [ ] Game initializes with 2 players
-- [ ] Each player has 40 life
-- [ ] AI makes decisions (play land, cast spells, attack)
-- [ ] Combat resolves correctly
-- [ ] Game ends with a winner
-
----
-
-## ✅ Phase 4: Code Exploration (20 minutes)
-
-### Read These Files (in order):
-1. [ ] **src/core/card.py** (5 min)
-   - Understand `Card` and `CardInstance` classes
-   - See how mana costs work
-   - Look at creature stats (power/toughness)
-
-2. [ ] **src/core/rules_engine.py** (8 min)
-   - Find `play_land()` - how does it validate?
-   - Find `cast_spell()` - what checks are performed?
-   - Find `resolve_combat_damage()` - how does combat work?
-
-3. [ ] **src/agent/llm_agent.py** (7 min)
-   - Find `_setup_tools()` - what tools are available?
-   - Find `_make_simple_decision()` - how does AI choose actions?
-   - See the decision flow
-
-### Code Understanding Check:
-- [ ] Can you trace what happens when AI plays a land?
-- [ ] Can you find where combat damage is calculated?
-- [ ] Do you understand how tools connect to the rules engine?
-
----
-
-## ✅ Phase 5: Make Your First Change (15 minutes)
-
-### Challenge: Add a New Card
-
-1. [ ] Open `src/data/cards.py`
-
-2. [ ] Add this card to `create_basic_cards()`:
+**Where you probably are now:**
 ```python
-Card(
-    id="giant_growth",
-    name="Giant Growth",
-    mana_cost=ManaCost(green=1),
-    card_types=[CardType.INSTANT],
-    colors=[Color.GREEN],
-    oracle_text="Target creature gets +3/+3 until end of turn."
+response = openai.chat.completions.create(
+    model="gpt-4",
+    messages=[{"role": "user", "content": "Write a poem"}]
 )
+print(response)  # Just text!
 ```
 
-3. [ ] Add it to a deck archetype (e.g., midrange):
-Open `src/data/cards.py` and locate `create_midrange_deck()`. Add one or two copies near the "Interaction" section:
+**Where you'll be after this guide:**
 ```python
-# Interaction (example)
-deck.append(cards["counterspell"])  # existing
-deck.append(cards["swan_song"])    # existing
-deck.append(cards["giant_growth"]) # add your new card here
+response = openai.chat.completions.create(
+    model="gpt-4",
+    messages=[{"role": "user", "content": "Play a turn of Magic"}],
+    tools=[get_game_state, execute_action, analyze_threats]  # ← AI can DO things!
+)
+
+# AI decides: "I'll call get_game_state(), then execute_action('play_land')"
+# Your code executes those functions
+# AI sees results and makes next decision
 ```
 
-4. [ ] Run the game: `python run.py --verbose`
+**The difference?**
+- Basic LLM: Can only **talk** about things
+- Agentic AI: Can **do** things through tools
 
-5. [ ] Verify:
-   - [ ] Game runs without errors
-    - [ ] Your card appears in the deck/hand during play
+This project teaches you the second approach!
+
+---
+
+## ✅ Phase 1: Conceptual Understanding (15 minutes)
+
+### 📚 Read These Documents (in order):
+
+#### 1. README.md (5 min)
+- [ ] Read the **Overview** section
+- [ ] Understand the project's goal (AI plays Magic)
+- [ ] See the **Quick Start** commands
+
+**Key Question:** Why is Magic a good problem for agentic AI?
+<details>
+<summary>Answer (click to reveal)</summary>
+
+Magic requires:
+- **Observation** (what's on the board?)
+- **Reasoning** (what's the best play?)
+- **Action** (cast spell, attack)
+- **Validation** (is this move legal?)
+
+This mirrors real-world agentic AI: observe → reason → act → validate!
+</details>
+
+#### 2. ARCHITECTURE.md (7 min)
+- [ ] Read **"Introduction: What is Agentic AI?"**
+- [ ] Read **"Core Concepts: Tools vs Fine-tuning"**
+- [ ] Read **"Our Three-Layer Architecture"**
+
+**Key Question:** What are the three layers and why are they separate?
+<details>
+<summary>Answer (click to reveal)</summary>
+
+1. **Agent Layer** - Makes decisions (LLM or heuristic)
+2. **Tools Layer** - Interface for actions
+3. **Rules Engine** - Validates everything
+
+They're separate so you can:
+- Swap the AI (OpenAI → Anthropic)
+- Test without AI (heuristic mode)
+- Validate all actions (no illegal moves)
+</details>
+
+#### 3. PROJECT_SUMMARY.md (3 min)
+- [ ] Skim the **Implementation Status**
+- [ ] See what features exist
+
+### 🧠 Understanding Check
+
+Before moving on, make sure you can answer:
+- [ ] What does "agentic AI" mean? (AI that uses tools to take actions)
+- [ ] Why use tools instead of fine-tuning? (Faster, cheaper, more reliable)
+- [ ] What's the role of the Rules Engine? (Validates all actions)
+
+If you're unsure, re-read the sections above!
+
+---
+
+## ✅ Phase 2: Environment Setup (10 minutes)
+
+### Installation
+
+Open your terminal and run these commands:
+
+```bash
+# Navigate to project
+cd /Users/markcastillo/git/mtg-player
+
+# Create virtual environment
+python3 -m venv venv
+
+# Activate it
+source venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Verify installation
+python -c "import pydantic; print('✅ Setup complete!')"
+```
+
+### Verification Tests
+
+- [ ] Run tests: `pytest` (should pass)
+- [ ] Check structure: `ls -la src/`
+- [ ] Verify tools exist: `ls src/tools/game_tools.py`
+
+**Troubleshooting:**
+- If `pytest` fails, read TROUBLESHOOTING.md
+- If imports fail, make sure venv is activated
+- If dependencies fail, try `pip install --upgrade pip` first
+
+---
+
+## ✅ Phase 3: First Run (Heuristic Mode) (10 minutes)
+
+**Why heuristic mode first?** 
+- No API key needed
+- Faster iterations
+- See the architecture in action
+- Understand tool flow
+
+### Run the Game
+
+### Understanding the Agent
+
+The agent is where decisions happen! Let's see how.
+
+#### File: `src/agent/llm_agent.py`
+
+Read these methods in order:
+
+1. **`_setup_tools()`** - What tools does the agent have access to?
+   - [ ] Read the tool list
+   - [ ] Understand: Agent doesn't know HOW tools work, just WHAT they do
+
+2. **`_make_llm_decision()`** (LLM mode) OR `_make_simple_decision()` (Heuristic mode)
+   - [ ] Compare the two approaches
+   - [ ] See: Both call the same tools!
+
+3. **Tool calling flow:**
+```python
+# LLM Mode
+response = llm.chat(messages, tools)
+if response.tool_calls:
+    for call in response.tool_calls:
+        result = execute_tool(call)
+        
+# Heuristic Mode  
+state = get_game_state()
+threats = analyze_threats()
+actions = get_legal_actions()
+# ... simple rules to choose action ...
+execute_action(chosen_action)
+```
+
+### 🧠 Key Insight
+
+Both modes demonstrate **separation of concerns**:
+- **Agent** decides what to do
+- **Tools** provide interface
+- **Rules Engine** enforces rules
+
+This is the essence of agentic AI architecture!
+
+---
+
+## ✅ Phase 9: Experiment with Prompts (10 minutes)
+
+Want to change how the AI thinks? Edit the prompts!
+
+#### File: `src/agent/prompts.py`
+
+This file contains all the instructions given to the LLM.
+
+### Exercise: Make the AI More Aggressive
+
+1. Open `src/agent/prompts.py`
+2. Find the strategy section
+3. Add emphasis on attacking:
+
+```python
+STRATEGY_GUIDELINES = """
+...existing text...
+
+AGGRESSIVE PLAY:
+- Attack whenever you have an advantage
+- Prioritize dealing damage over board development
+- Take calculated risks to pressure opponents
+"""
+```
+
+4. Run the game: `python run.py --verbose`
+5. Observe: Does the AI attack more?
+
+### What You're Learning
+
+**Prompt engineering** is how you control LLM behavior WITHOUT retraining!
+
+- Change prompts → Change behavior
+- No code changes needed
+- Iterate quickly
+
+---
+
+## ✅ Phase 10: Advanced Challenges (Optional)
+
+Ready to go deeper? Try these challenges:
+
+### Challenge 1: Add a New Tool
+
+Create a tool that counts life advantage:
+
+```python
+# Add to src/tools/game_tools.py
+
+class GetLifeAdvantageTool(BaseTool):
+    """Calculate life advantage over opponents."""
+    
+    name = "get_life_advantage"
+    description = "Returns life differential between you and opponents"
+    
+    def _run(self, player_idx: int) -> dict:
+        player = self.rules_engine.game_state.players[player_idx]
+        opponents = [p for i, p in enumerate(self.rules_engine.game_state.players) if i != player_idx]
+        
+        avg_opp_life = sum(p.life for p in opponents) / len(opponents)
+        advantage = player.life - avg_opp_life
+        
+        return {
+            "my_life": player.life,
+            "avg_opponent_life": avg_opp_life,
+            "advantage": advantage
+        }
+```
+
+Then:
+1. Register the tool in `_setup_tools()`
+2. Update prompts to mention it
+3. Test: `python run.py --verbose`
+
+### Challenge 2: Write a Complex Test
+
+Test the entire game loop:
+
+```python
+# Add to tests/test_rules_engine.py
+
+def test_complete_turn_sequence(rules_engine: RulesEngine):
+    """Test a full turn: untap, upkeep, draw, main, combat, main, end."""
+    # Setup
+    # ... add setup code ...
+    
+    # Untap phase
+    # Upkeep phase
+    # Draw phase
+    # Main phase 1
+    # Combat phase
+    # Main phase 2
+    # End phase
+    
+    # Assert all phases executed correctly
+```
+
+### Challenge 3: Compare LLM Strategies
+
+Run multiple games and compare:
+
+```bash
+# Run 5 games with different prompts
+for i in {1..5}; do
+    python run.py --verbose > "game_$i.log"
+done
+
+# Analyze: Which prompt strategy won more?
+```
+
+---
+
+## 🎓 What You've Learned
+
+Congratulations! You now understand:
+
+✅ **Agentic AI Concepts**
+- What makes AI "agentic" (tool use)
+- Why tools beat fine-tuning for structured tasks
+- How to design tool-based systems
+
+✅ **Architecture Patterns**
+- Three-layer architecture (Agent, Tools, Rules)
+- Separation of concerns
+- Validation and error handling
+
+✅ **Practical Skills**
+- Function calling / tool use APIs
+- JSON schema design
+- Prompt engineering
+- Testing AI systems
+
+✅ **This Specific Project**
+- How to run games (LLM and heuristic modes)
+- How to add cards
+- How to create tools
+- How to modify AI behavior
+
+---
+
+## 📚 Next Steps
+
+### Beginner Path
+1. ✅ Read all phase 4 documentation (PHASE4_*.md files)
+2. ✅ Try different deck archetypes
+3. ✅ Experiment with prompt modifications
+4. ✅ Add more test cards
+
+### Intermediate Path
+1. ✅ Implement a new tool (e.g., "predict next turn")
+2. ✅ Add a new deck archetype
+3. ✅ Improve heuristic AI logic
+4. ✅ Write comprehensive tests
+
+### Advanced Path
+1. ✅ Implement instant-speed response system
+2. ✅ Add multiplayer support (3-4 players)
+3. ✅ Build tournament mode (multiple games, track wins)
+4. ✅ Add memory/learning (agent improves over games)
+5. ✅ Integrate different LLM providers (Anthropic, etc.)
+
+---
+
+## 🤝 Contributing
+
+Want to contribute? Great!
+
+### Good First Issues
+- Add more cards to `src/data/cards.py`
+- Improve test coverage
+- Add docstrings to functions
+- Write more examples in documentation
+
+### How to Contribute
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Write tests
+5. Submit a pull request
+
+---
+
+## ❓ FAQ
+
+**Q: Do I need an expensive GPU?**  
+A: No! We use API-based LLMs (OpenAI, Anthropic, etc.). Runs on any computer.
+
+**Q: How much do API calls cost?**  
+A: ~$0.01-0.05 per game with GPT-4. Use `--no-llm` for free testing.
+
+**Q: Can I use different LLM providers?**  
+A: Yes! Check `src/agent/llm_agent.py` to see how to add providers.
+
+**Q: Why Magic: The Gathering?**  
+A: Magic is complex (teaches agentic patterns) but structured (rules validate everything). Perfect for learning!
+
+**Q: What if I don't know Magic rules?**  
+A: That's fine! The rules engine handles everything. Focus on the AI architecture.
+
+**Q: Can I use this for other games?**  
+A: Absolutely! The architecture works for any turn-based game. Swap out the rules engine!
+
+---
+
+## 📖 Additional Resources
+
+### Documentation
+- **ARCHITECTURE.md** - Deep dive on design decisions
+- **LOGGING.md** - Understanding the logging system
+- **PHASE4_*.md** - Advanced features documentation
+
+### External Learning
+- [OpenAI Function Calling Guide](https://platform.openai.com/docs/guides/function-calling)
+- [Anthropic Tool Use Guide](https://docs.anthropic.com/claude/docs/tool-use)
+- [LangChain Agents](https://python.langchain.com/docs/modules/agents/)
+
+### Community
+- Open an issue: Questions, bugs, feature requests
+- Discussions: Share your experiments, ask for help
+
+---
+
+## 🎉 You Did It!
+
+You've gone from basic LLM prompting to understanding agentic AI architecture!
+
+**What you can do now:**
+- ✅ Build tool-based AI systems
+- ✅ Design clean, testable architectures
+- ✅ Use function calling APIs
+- ✅ Validate AI actions with rules engines
+- ✅ Iterate quickly with prompt engineering
+
+**Next time someone asks "How do I make an AI that can DO things?"** - you know the answer: **Tools!**
+
+Happy coding! 🚀
+python run.py --no-llm --verbose
+
+# Look for your card in the output
+# It should appear in hand or on battlefield
+```
+
+#### Step 4: Verify
+
+- [ ] Game runs without errors
+- [ ] Your card appears in the deck
+- [ ] No crashes when drawn
 
 ### 🎉 Congratulations! You just extended the game!
 
----
-
-## ✅ Phase 6: Run Tests & Understand Validation (10 minutes)
-
-### Run the Test Suite:
-- [ ] Run all tests: `pytest -v`
-- [ ] Check coverage: `pytest --cov=src tests/`
-- [ ] Read test output - understand what's being validated
-
-### Read Test File:
-- [ ] Open `tests/test_rules_engine.py`
-- [ ] Read `test_land_drop()` - see how it validates land drops
-- [ ] Read `test_cannot_play_two_lands()` - see rule enforcement
-- [ ] Read `test_win_condition()` - see game-over detection
-
-### Challenge: Write a Test
-- [ ] Add a test for casting a creature
-- [ ] Run it: `pytest tests/test_rules_engine.py::test_your_test_name -v`
+**What you learned:**
+- How to add data (cards)
+- How the deck building system works
+- How to test changes
 
 ---
 
-## ✅ Phase 7: Deep Dive on Tools (15 minutes)
+## ✅ Phase 7: Understanding Tests (15 minutes)
 
-### Understand the Tool Layer:
-1. [ ] Open `src/tools/game_tools.py`
+Tests teach you how the system SHOULD work.
 
-2. [ ] Study each tool:
-   - [ ] `GetGameStateTool.execute()` - Returns game state as dict
-   - [ ] `GetLegalActionsTool.execute()` - What actions are available?
-   - [ ] `ExecuteActionTool.execute()` - How are actions validated?
-   - [ ] `AnalyzeThreatsTool.execute()` - How are threats assessed?
+### Run the Test Suite
 
-3. [ ] Trace a tool call:
-   - [ ] Agent calls `get_legal_actions()`
-   - [ ] Tool queries rules engine
-   - [ ] Returns JSON with available actions
-   - [ ] Agent chooses one
-   - [ ] Agent calls `execute_action()`
-   - [ ] Tool validates and executes
+```bash
+# Run all tests
+pytest -v
+
+# Run specific test file
+pytest tests/test_rules_engine.py -v
+
+# Run with coverage
+pytest --cov=src tests/
+```
+
+### Read a Test File
+
+Open `tests/test_rules_engine.py` and read these tests:
+
+#### Test: `test_land_drop()`
+```python
+def test_land_drop(rules_engine: RulesEngine):
+    # Setup: Player has a Forest in hand
+    # Action: Play the land
+    # Assert: Land is now on battlefield
+```
+
+**What it teaches:** How to interact with the rules engine programmatically.
+
+#### Test: `test_cannot_play_two_lands()`
+```python
+def test_cannot_play_two_lands(rules_engine: RulesEngine):
+    # Setup: Player has two Forests
+    # Action: Play first land (succeeds)
+    # Action: Try to play second land (fails!)
+    # Assert: Second attempt raises ValueError
+```
+
+**What it teaches:** Rules engine enforces game rules.
+
+### 🧠 Challenge: Write Your Own Test
+
+Add this test to `tests/test_rules_engine.py`:
+
+```python
+def test_casting_creature(rules_engine: RulesEngine):
+    """Test that casting a creature works correctly."""
+    player_idx = 0
+    player = rules_engine.game_state.players[player_idx]
+    
+    # Setup: Give player mana and a creature
+    # (You fill this in!)
+    
+    # Cast the creature
+    # (You fill this in!)
+    
+    # Assert creature is on battlefield
+    # (You fill this in!)
+```
+
+Run it: `pytest tests/test_rules_engine.py::test_casting_creature -v`
+
+---
+
+## ✅ Phase 8: Deep Dive on Agent Decision-Making (15 minutes)
    - [ ] Game state updates
 
 ### Understanding Check:
