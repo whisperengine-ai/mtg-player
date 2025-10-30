@@ -906,3 +906,383 @@ class StrategyRecommendationTool:
         emoji = strategy_emoji.get(strategy, "🎯")
         
         return f"{emoji} **{strategy}** - {reasoning}"
+
+
+class OpponentModelingTool:
+    """Model opponent deck archetype and identify threats."""
+    
+    def __init__(self):
+        self.game_state: Optional[Any] = None  # Will be set by agent
+    
+    def get_schema(self) -> Dict[str, Any]:
+        """Return tool schema for LLM."""
+        return {
+            "type": "function",
+            "function": {
+                "name": "analyze_opponent",
+                "description": "Analyze opponent deck composition and identify threats. Returns archetype (aggro/control/combo/midrange), threat level (0.0-1.0), and biggest threat card. Use to understand opponent strategy and plan accordingly.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "opponent_id": {
+                            "type": "string",
+                            "description": "ID of opponent to analyze (optional, analyzes all if not specified)"
+                        }
+                    },
+                    "required": []
+                }
+            }
+        }
+    
+    def execute(self, opponent_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Analyze opponent(s) deck composition and identify threats.
+        
+        Args:
+            opponent_id: ID of specific opponent (analyzes all if not specified)
+            
+        Returns:
+            Dictionary with archetype analysis and threats
+        """
+        if not self.game_state:
+            return {"error": "Game state not available"}
+        
+        active_player = self.game_state.get_active_player()
+        if not active_player:
+            return {"error": "No active player"}
+        
+        # Get opponents to analyze
+        if opponent_id:
+            opponent = next((p for p in self.game_state.players if p.id == opponent_id), None)
+            if not opponent:
+                return {"error": f"Opponent {opponent_id} not found"}
+            opponents = [opponent]
+        else:
+            opponents = [p for p in self.game_state.players if p.id != active_player.id and p.life > 0]
+        
+        if not opponents:
+            return {
+                "success": True,
+                "message": "No opponents to analyze"
+            }
+        
+        # Analyze each opponent
+        analyses = []
+        for opponent in opponents:
+            analysis = self._analyze_opponent(opponent, active_player)
+            analyses.append(analysis)
+        
+        # If single opponent, return detailed analysis
+        if len(analyses) == 1:
+            return {
+                "success": True,
+                "opponent_id": analyses[0]["opponent_id"],
+                "opponent_name": analyses[0]["opponent_name"],
+                "archetype": analyses[0]["archetype"],
+                "confidence": round(analyses[0]["archetype_confidence"], 2),
+                "threat_level": round(analyses[0]["threat_level"], 2),
+                "biggest_threat": analyses[0]["biggest_threat"],
+                "board_summary": analyses[0]["board_summary"],
+                "card_types": analyses[0]["card_types"],
+                "estimated_strategy": analyses[0]["estimated_strategy"],
+                "political_value": analyses[0]["political_value"],
+                "summary": analyses[0]["summary"]
+            }
+        
+        # If multiple opponents, return summary
+        return {
+            "success": True,
+            "opponent_count": len(analyses),
+            "opponents": [
+                {
+                    "id": a["opponent_id"],
+                    "name": a["opponent_name"],
+                    "archetype": a["archetype"],
+                    "threat_level": round(a["threat_level"], 2),
+                    "biggest_threat": a["biggest_threat"]["name"] if a["biggest_threat"] else "None"
+                }
+                for a in analyses
+            ],
+            "most_threatening": max(analyses, key=lambda x: x["threat_level"]),
+            "archetypes_present": list(set(a["archetype"] for a in analyses))
+        }
+    
+    def _analyze_opponent(self, opponent: Any, active_player: Any) -> Dict[str, Any]:
+        """Analyze a single opponent."""
+        board_creatures = opponent.creatures_in_play()
+        board_lands = opponent.lands_in_play()
+        
+        # Categorize board creatures
+        aggro_creatures = self._count_aggro_creatures(board_creatures)
+        control_creatures = self._count_control_creatures(board_creatures)
+        combo_creatures = self._count_combo_creatures(board_creatures)
+        ramp_artifacts = self._count_ramp_artifacts(opponent.battlefield)
+        
+        # Determine archetype
+        archetype, confidence = self._determine_archetype(
+            len(board_creatures),
+            aggro_creatures,
+            control_creatures,
+            combo_creatures,
+            ramp_artifacts,
+            len(board_lands),
+            len(opponent.hand)
+        )
+        
+        # Find biggest threat
+        biggest_threat = self._identify_biggest_threat(board_creatures)
+        
+        # Calculate threat level
+        threat_level = self._calculate_threat_level(
+            board_creatures,
+            opponent.life,
+            active_player.life,
+            aggro_creatures,
+            len(opponent.hand)
+        )
+        
+        # Board summary
+        total_power = sum(c.current_power() for c in board_creatures if c.current_power() > 0)
+        
+        # Estimate strategy from board
+        estimated_strategy = self._estimate_strategy(archetype, len(board_creatures), total_power)
+        
+        # Political value (threat to eliminate vs threat to keep)
+        political_value = self._assess_political_value(threat_level, opponent.life)
+        
+        return {
+            "opponent_id": opponent.id,
+            "opponent_name": opponent.name,
+            "archetype": archetype,
+            "archetype_confidence": confidence,
+            "threat_level": threat_level,
+            "biggest_threat": biggest_threat,
+            "board_summary": {
+                "creatures": len(board_creatures),
+                "total_power": total_power,
+                "lands": len(board_lands),
+                "hand_size": len(opponent.hand)
+            },
+            "card_types": {
+                "aggro_creatures": aggro_creatures,
+                "control_creatures": control_creatures,
+                "combo_creatures": combo_creatures,
+                "ramp_artifacts": ramp_artifacts
+            },
+            "estimated_strategy": estimated_strategy,
+            "political_value": political_value,
+            "summary": self._generate_summary(opponent.name, archetype, threat_level, biggest_threat)
+        }
+    
+    def _count_aggro_creatures(self, creatures: List[Any]) -> int:
+        """Count creatures with power >= 3 or haste."""
+        count = 0
+        for creature in creatures:
+            power = creature.current_power()
+            has_haste = "haste" in creature.card.keywords
+            if power >= 3 or has_haste:
+                count += 1
+        return count
+    
+    def _count_control_creatures(self, creatures: List[Any]) -> int:
+        """Count creatures with defensive abilities or high toughness."""
+        count = 0
+        for creature in creatures:
+            toughness = creature.current_toughness()
+            keywords = creature.card.keywords
+            # Control creatures have flying, reach, or high toughness
+            if toughness >= 4 or "flying" in keywords or "reach" in keywords:
+                count += 1
+        return count
+    
+    def _count_combo_creatures(self, creatures: List[Any]) -> int:
+        """Count creatures that might be part of combos."""
+        # Creatures with special abilities are combo pieces
+        count = 0
+        for creature in creatures:
+            if creature.card.oracle_text and ("tap" in creature.card.oracle_text.lower() or "draw" in creature.card.oracle_text.lower()):
+                count += 1
+        return count
+    
+    def _count_ramp_artifacts(self, battlefield: List[Any]) -> int:
+        """Count mana ramp artifacts."""
+        count = 0
+        for card in battlefield:
+            if card.card.card_types and "artifact" in [t.value for t in card.card.card_types]:
+                card_name = card.card.name.lower()
+                # Common ramp artifacts
+                if any(x in card_name for x in ["ring", "signet", "sphere", "stone", "vault", "crank"]):
+                    count += 1
+        return count
+    
+    def _determine_archetype(
+        self,
+        creature_count: int,
+        aggro_creatures: int,
+        control_creatures: int,
+        combo_creatures: int,
+        ramp_artifacts: int,
+        land_count: int,
+        hand_size: int
+    ) -> tuple:
+        """
+        Determine opponent archetype.
+        
+        Returns: (archetype_name, confidence)
+        """
+        # Score each archetype
+        aggro_score = aggro_creatures * 2
+        control_score = (control_creatures * 1.5) + (land_count * 0.5)
+        combo_score = combo_creatures * 2
+        ramp_score = ramp_artifacts * 1.5
+        midrange_score = (creature_count * 0.8) + (control_creatures * 0.5)
+        
+        # Adjust scores based on card counts
+        if creature_count >= 5:
+            # Many creatures strongly suggest aggro
+            aggro_score += 5
+        if creature_count >= 6:
+            # 6+ creatures almost certainly aggro
+            aggro_score += 3
+        if creature_count <= 2:
+            control_score += 2  # Few creatures suggest control
+        if hand_size >= 5:
+            combo_score += 1  # Large hand suggests combo setup
+        if ramp_artifacts >= 3:
+            ramp_score += 3  # Many ramps suggest ramp deck
+        
+        scores = {
+            "aggro": aggro_score,
+            "control": control_score,
+            "combo": combo_score,
+            "ramp": ramp_score,
+            "midrange": midrange_score
+        }
+        
+        # Determine archetype
+        archetype = max(scores, key=lambda x: scores[x])
+        total_score = sum(scores.values())
+        confidence = scores[archetype] / max(total_score, 1)
+        
+        return (archetype, confidence)
+    
+    def _identify_biggest_threat(self, creatures: List[Any]) -> Optional[Dict[str, Any]]:
+        """Identify the most threatening creature on board."""
+        if not creatures:
+            return None
+        
+        biggest = None
+        biggest_score = 0
+        
+        for creature in creatures:
+            # Threat score: power + toughness + evasion bonus
+            power = creature.current_power()
+            toughness = creature.current_toughness()
+            score = power + (toughness * 0.5)
+            
+            # Bonus for evasion
+            if "flying" in creature.card.keywords:
+                score += 3
+            if "unblockable" in creature.card.keywords or "cant_be_blocked" in creature.card.keywords:
+                score += 4
+            if "trample" in creature.card.keywords:
+                score += 1
+            
+            if score > biggest_score:
+                biggest_score = score
+                biggest = creature
+        
+        if biggest:
+            return {
+                "name": biggest.card.name,
+                "power": biggest.current_power(),
+                "toughness": biggest.current_toughness(),
+                "threat_score": biggest_score
+            }
+        
+        return None
+    
+    def _calculate_threat_level(
+        self,
+        creatures: List[Any],
+        opponent_life: int,
+        player_life: int,
+        aggro_creatures: int,
+        hand_size: int
+    ) -> float:
+        """
+        Calculate threat level 0.0-1.0.
+        
+        Factors: creature count, total power, life totals, hand size
+        """
+        if opponent_life <= 0:
+            return 0.0
+        
+        # Power calculation
+        total_power = sum(c.current_power() for c in creatures if c.current_power() > 0)
+        
+        # Base threat from power
+        threat = min(1.0, total_power / 20.0)  # 20 power = max threat
+        
+        # Modifier for aggro creatures
+        threat += (aggro_creatures * 0.1)
+        
+        # Modifier for hand size (more cards = more options)
+        threat += (hand_size * 0.05)
+        
+        # Modifier for relative life totals
+        if player_life < opponent_life:
+            threat += 0.2  # Opponent ahead in life
+        
+        # Clamp to 0.0-1.0
+        return min(1.0, threat)
+    
+    def _estimate_strategy(self, archetype: str, creature_count: int, _total_power: int) -> str:
+        """Estimate what strategy opponent is executing."""
+        if archetype == "aggro":
+            if creature_count >= 5:
+                return "Wide aggro (many small creatures)"
+            else:
+                return "Tall aggro (few powerful creatures)"
+        
+        elif archetype == "control":
+            return "Control (stabilizing board, disruption)"
+        
+        elif archetype == "combo":
+            return "Combo (setting up combination)"
+        
+        elif archetype == "ramp":
+            return "Ramp (building mana for big plays)"
+        
+        else:  # midrange
+            return "Midrange (balanced creatures and removal)"
+    
+    def _assess_political_value(self, threat_level: float, opponent_life: int) -> str:
+        """Assess political priority for this opponent."""
+        if threat_level >= 0.8:
+            return "ELIMINATE (highest priority threat)"
+        elif threat_level >= 0.6:
+            return "CONTAIN (watch closely, respond to)"
+        elif threat_level >= 0.4:
+            return "MONITOR (keep eye on board)"
+        elif opponent_life <= 15:
+            return "VULNERABLE (focus damage)"
+        else:
+            return "SAFE (lower priority)"
+    
+    def _generate_summary(
+        self,
+        opponent_name: str,
+        archetype: str,
+        threat_level: float,
+        biggest_threat: Optional[Dict[str, Any]]
+    ) -> str:
+        """Generate human-readable summary."""
+        threat_emoji = "🔴" if threat_level >= 0.8 else "🟡" if threat_level >= 0.5 else "🟢"
+        
+        summary = f"{threat_emoji} **{opponent_name}** plays {archetype} (threat: {threat_level:.0%})"
+        
+        if biggest_threat:
+            summary += f". Biggest threat: {biggest_threat['name']} ({biggest_threat['power']}/{biggest_threat['toughness']})"
+        
+        return summary

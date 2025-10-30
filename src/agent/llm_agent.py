@@ -15,7 +15,7 @@ from tools.game_tools import (
     GetStackStateTool,
     CanRespondTool
 )
-from tools.evaluation_tools import EvaluatePositionTool, CanIWinTool, StrategyRecommendationTool
+from tools.evaluation_tools import EvaluatePositionTool, CanIWinTool, StrategyRecommendationTool, OpponentModelingTool
 from agent.prompts import SYSTEM_PROMPT, DECISION_PROMPT, MAIN_PHASE_PROMPT, COMBAT_PROMPT
 
 # LLM client imports
@@ -232,6 +232,9 @@ class MTGAgent:
         strategy_recommendation = StrategyRecommendationTool()
         strategy_recommendation.game_state = self.game_state
         
+        opponent_modeling = OpponentModelingTool()
+        opponent_modeling.game_state = self.game_state
+        
         return {
             "get_game_state": get_game_state,
             "get_legal_actions": get_legal_actions,
@@ -241,7 +244,8 @@ class MTGAgent:
             "can_respond": can_respond,
             "evaluate_position": evaluate_position,
             "can_i_win": can_i_win,
-            "recommend_strategy": strategy_recommendation
+            "recommend_strategy": strategy_recommendation,
+            "analyze_opponent": opponent_modeling
         }
     
     def _get_tool_schemas(self) -> List[Dict[str, Any]]:
@@ -381,6 +385,23 @@ class MTGAgent:
                     "parameters": {
                         "type": "object",
                         "properties": {},
+                        "required": []
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "analyze_opponent",
+                    "description": "Analyze opponent deck composition and identify threats. Returns archetype (aggro/control/combo/midrange), threat level (0.0-1.0), and biggest threat card. Use to understand opponent strategy and plan accordingly.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "opponent_id": {
+                                "type": "string",
+                                "description": "ID of opponent to analyze (optional, analyzes all if not specified)"
+                            }
+                        },
                         "required": []
                     }
                 }
