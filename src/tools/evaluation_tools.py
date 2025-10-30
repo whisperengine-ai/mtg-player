@@ -3,7 +3,7 @@ Position evaluation tools for MTG Commander AI.
 
 Provides scoring functions to evaluate game state quality.
 """
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 
 class EvaluatePositionTool:
@@ -576,3 +576,333 @@ class CanIWinTool:
                 f"You cannot reach lethal this turn. Maximum damage available: {damage}. "
                 f"{line}"
             )
+
+
+class StrategyRecommendationTool:
+    """Recommend strategic approach based on game position."""
+    
+    def __init__(self):
+        self.game_state: Optional[Any] = None  # Will be set by agent
+    
+    def get_schema(self) -> Dict[str, Any]:
+        """Return tool schema for LLM."""
+        return {
+            "type": "function",
+            "function": {
+                "name": "recommend_strategy",
+                "description": "Analyze the current game state and recommend a strategic approach. Returns one of: RAMP (accelerate resources), DEFEND (stabilize board), ATTACK (aggressive creatures), or CLOSE (finish game). Includes reasoning and action priorities.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "player_id": {
+                            "type": "string",
+                            "description": "ID of the player to recommend strategy for (optional, defaults to active player)"
+                        }
+                    },
+                    "required": []
+                }
+            }
+        }
+    
+    def execute(self, player_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Recommend a strategic approach.
+        
+        Args:
+            player_id: ID of player to recommend for (defaults to active player)
+            
+        Returns:
+            Dictionary with:
+            - strategy: RAMP, DEFEND, ATTACK, or CLOSE
+            - confidence: 0.0-1.0 confidence in this recommendation
+            - reasoning: Explanation of why this strategy
+            - priorities: List of action priorities for this turn
+            - game_phase: Current phase analysis
+        """
+        if not self.game_state:
+            return {"error": "Game state not available"}
+        
+        # Get player to evaluate
+        if player_id:
+            player = next((p for p in self.game_state.players if p.id == player_id), None)
+            if not player:
+                return {"error": f"Player {player_id} not found"}
+        else:
+            player = self.game_state.get_active_player()
+            if not player:
+                return {"error": "No active player"}
+        
+        # Evaluate position
+        position_score = self._evaluate_position(player)
+        board_presence = self._evaluate_board_presence(player)
+        mana_resources = self._evaluate_resources(player)
+        threats = self._evaluate_threats(player)
+        card_advantage = self._evaluate_hand_size(player)
+        
+        # Determine strategy
+        strategy, confidence = self._determine_strategy(
+            position_score,
+            board_presence,
+            mana_resources,
+            threats,
+            card_advantage
+        )
+        
+        # Get priorities for this strategy
+        priorities = self._get_priorities(strategy, threats)
+        
+        # Generate reasoning
+        reasoning = self._generate_reasoning(
+            strategy,
+            position_score,
+            board_presence,
+            mana_resources,
+            threats
+        )
+        
+        return {
+            "success": True,
+            "player_id": player.id,
+            "player_name": player.name,
+            "strategy": strategy,
+            "confidence": round(confidence, 2),
+            "reasoning": reasoning,
+            "priorities": priorities,
+            "game_phase": f"{self.game_state.current_phase.value}",
+            "position_score": round(position_score, 2),
+            "board_presence": board_presence,
+            "resources": mana_resources,
+            "threats_detected": threats,
+            "hand_size": len(player.hand),
+            "summary": self._generate_summary(strategy, reasoning)
+        }
+    
+    def _evaluate_position(self, player: Any) -> float:
+        """Evaluate relative game position (0.0-1.0)."""
+        opponents = [p for p in self.game_state.players if p.id != player.id and p.life > 0]
+        if not opponents:
+            return 1.0
+        
+        if player.life <= 0:
+            return 0.0
+        elif player.life <= 10:
+            return 0.2
+        elif player.life <= 20:
+            return 0.4
+        else:
+            avg_opponent_life = sum(p.life for p in opponents) / len(opponents)
+            if player.life >= avg_opponent_life:
+                return 0.7
+            else:
+                return 0.5
+    
+    def _evaluate_board_presence(self, player: Any) -> Dict[str, int]:
+        """Evaluate board state."""
+        creatures = player.creatures_in_play()
+        lands = player.lands_in_play()
+        total_power = sum(c.current_power() for c in creatures if c.current_power() > 0)
+        
+        return {
+            "creatures": len(creatures),
+            "total_power": total_power,
+            "lands": len(lands),
+            "untapped_lands": len(player.untapped_lands())
+        }
+    
+    def _evaluate_resources(self, player: Any) -> Dict[str, int]:
+        """Evaluate available mana resources."""
+        available_mana = player.available_mana()
+        
+        return {
+            "total_mana": available_mana.total(),
+            "mana_colors": {
+                "white": available_mana.white,
+                "blue": available_mana.blue,
+                "black": available_mana.black,
+                "red": available_mana.red,
+                "green": available_mana.green,
+                "colorless": available_mana.colorless
+            }
+        }
+    
+    def _evaluate_threats(self, player: Any) -> int:
+        """Count threatening opponent creatures."""
+        opponents = [p for p in self.game_state.players if p.id != player.id and p.life > 0]
+        
+        threat_count = 0
+        for opponent in opponents:
+            for creature in opponent.creatures_in_play():
+                # Consider creature threatening if power >= 2 or has evasion
+                power = creature.current_power()
+                if power >= 2 or "flying" in creature.card.keywords or "unblockable" in creature.card.keywords:
+                    threat_count += 1
+        
+        return threat_count
+    
+    def _evaluate_hand_size(self, player: Any) -> int:
+        """Evaluate card advantage."""
+        return len(player.hand)
+    
+    def _determine_strategy(
+        self,
+        position_score: float,
+        board_presence: Dict[str, int],
+        mana_resources: Dict[str, Any],
+        threats: int,
+        card_advantage: int = 0  # Currently unused, for future enhancement
+    ) -> tuple:
+        """
+        Determine best strategy based on game state.
+        
+        Returns: (strategy_name, confidence)
+        """
+        position = position_score
+        creatures = board_presence["creatures"]
+        total_power = board_presence["total_power"]
+        lands = board_presence["lands"]
+        mana_available = mana_resources["total_mana"]
+        
+        # Winning position + have power → CLOSE
+        if position >= 0.7 and total_power >= 6:
+            return ("CLOSE", 0.9)
+        
+        # Have lethal threat on board + good position → ATTACK
+        if position >= 0.6 and total_power >= 8 and creatures >= 2:
+            return ("ATTACK", 0.85)
+        
+        # Under threat, need stabilization → DEFEND
+        if position <= 0.3 and threats >= 3:
+            return ("DEFEND", 0.9)
+        
+        if position <= 0.4 and threats >= 2:
+            return ("DEFEND", 0.8)
+        
+        # Behind on board but have resources → RAMP
+        if creatures <= 1 and mana_available <= 3 and lands <= 2:
+            return ("RAMP", 0.85)
+        
+        # Low resources despite board → RAMP
+        if mana_available <= 2:
+            return ("RAMP", 0.75)
+        
+        # Balanced position with reasonable board → ATTACK
+        if position >= 0.45 and creatures >= 2 and total_power >= 4:
+            return ("ATTACK", 0.7)
+        
+        # Default based on position
+        if position >= 0.6:
+            return ("ATTACK", 0.65)
+        elif position >= 0.45:
+            return ("RAMP", 0.6)
+        elif position >= 0.3:
+            return ("DEFEND", 0.65)
+        else:
+            return ("DEFEND", 0.7)
+    
+    def _get_priorities(self, strategy: str, threats: int) -> List[str]:
+        """Get prioritized actions for this turn."""
+        priorities = []
+        
+        if strategy == "RAMP":
+            priorities.extend([
+                "Play land to accelerate mana",
+                "Cast mana dorks or ramp spells",
+                "Build toward key spells",
+                "Avoid unnecessary trades"
+            ])
+        
+        elif strategy == "DEFEND":
+            priorities.extend([
+                "Remove or block the biggest threat",
+                "Trade creatures favorably if possible",
+                "Gain life if available",
+                "Hold interaction (removal/instants) in hand"
+            ])
+            if threats > 3:
+                priorities.insert(0, "Stabilize the board immediately")
+        
+        elif strategy == "ATTACK":
+            priorities.extend([
+                "Attack with all creatures that can deal damage",
+                "Play creatures to increase board presence",
+                "Deal damage and put pressure on opponents",
+                "Look for opening to close game"
+            ])
+        
+        elif strategy == "CLOSE":
+            priorities.extend([
+                "Execute the plan for lethal",
+                "Use remaining spells to protect creatures",
+                "Attack to deal final damage",
+                "Hold responses for opponent interaction"
+            ])
+        
+        return priorities
+    
+    def _generate_reasoning(
+        self,
+        strategy: str,
+        position: float,
+        board: Dict[str, int],
+        resources: Dict[str, Any],
+        threats: int
+    ) -> str:
+        """Generate explanation for strategy recommendation."""
+        parts = []
+        
+        # Position assessment
+        if position >= 0.7:
+            parts.append("You have a winning position")
+        elif position >= 0.55:
+            parts.append("You're slightly ahead")
+        elif position >= 0.45:
+            parts.append("The game is roughly even")
+        elif position >= 0.3:
+            parts.append("You're slightly behind")
+        else:
+            parts.append("You're in danger - need to stabilize")
+        
+        # Board assessment
+        if board["creatures"] == 0:
+            parts.append("with no creatures on board")
+        elif board["total_power"] >= 10:
+            parts.append(f"with a strong board ({board['creatures']} creatures, {board['total_power']} power)")
+        elif board["creatures"] >= 3:
+            parts.append(f"with a decent board ({board['creatures']} creatures, {board['total_power']} power)")
+        
+        # Threat assessment
+        if threats >= 3:
+            parts.append(f"while facing {threats} threats")
+        elif threats >= 1:
+            parts.append("while facing some threats")
+        
+        # Resource assessment
+        mana = resources["total_mana"]
+        if mana <= 2:
+            parts.append("with limited mana available")
+        elif mana >= 6:
+            parts.append("with abundant resources")
+        
+        # Strategy specific
+        if strategy == "CLOSE":
+            parts.append(". You should finish the game this turn.")
+        elif strategy == "ATTACK":
+            parts.append(". Press your advantage with creatures.")
+        elif strategy == "DEFEND":
+            parts.append(". Stabilize and survive.")
+        elif strategy == "RAMP":
+            parts.append(". Build resources for future turns.")
+        
+        return " ".join(parts)
+    
+    def _generate_summary(self, strategy: str, reasoning: str) -> str:
+        """Generate concise summary."""
+        strategy_emoji = {
+            "RAMP": "📈",
+            "DEFEND": "🛡️",
+            "ATTACK": "⚔️",
+            "CLOSE": "🏁"
+        }
+        emoji = strategy_emoji.get(strategy, "🎯")
+        
+        return f"{emoji} **{strategy}** - {reasoning}"

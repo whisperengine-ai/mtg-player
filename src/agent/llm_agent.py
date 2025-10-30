@@ -15,7 +15,7 @@ from tools.game_tools import (
     GetStackStateTool,
     CanRespondTool
 )
-from tools.evaluation_tools import EvaluatePositionTool, CanIWinTool
+from tools.evaluation_tools import EvaluatePositionTool, CanIWinTool, StrategyRecommendationTool
 from agent.prompts import SYSTEM_PROMPT, DECISION_PROMPT, MAIN_PHASE_PROMPT, COMBAT_PROMPT
 
 # LLM client imports
@@ -229,6 +229,9 @@ class MTGAgent:
         can_i_win = CanIWinTool()
         can_i_win.game_state = self.game_state
         
+        strategy_recommendation = StrategyRecommendationTool()
+        strategy_recommendation.game_state = self.game_state
+        
         return {
             "get_game_state": get_game_state,
             "get_legal_actions": get_legal_actions,
@@ -237,7 +240,8 @@ class MTGAgent:
             "get_stack_state": get_stack_state,
             "can_respond": can_respond,
             "evaluate_position": evaluate_position,
-            "can_i_win": can_i_win
+            "can_i_win": can_i_win,
+            "recommend_strategy": strategy_recommendation
         }
     
     def _get_tool_schemas(self) -> List[Dict[str, Any]]:
@@ -362,6 +366,18 @@ class MTGAgent:
                 "function": {
                     "name": "can_i_win",
                     "description": "Analyze if you can deal lethal damage this turn. Calculates total damage from attacking creatures and instant-speed spells in hand. Returns whether lethal is possible, total damage potential, and the attack line. Use this when you think you might be able to close out the game.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {},
+                        "required": []
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "recommend_strategy",
+                    "description": "Analyze the current game state and get a strategic recommendation. Returns one of RAMP (build resources), DEFEND (stabilize), ATTACK (pressure), or CLOSE (finish). Includes priorities and reasoning for your turn.",
                     "parameters": {
                         "type": "object",
                         "properties": {},
