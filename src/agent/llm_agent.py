@@ -151,6 +151,16 @@ class MTGAgent:
                     api_key="ollama"  # Ollama doesn't need real key
                 )
             
+            elif provider == "lmstudio":
+                if OpenAI is None:
+                    raise ImportError("openai package not installed. Run: pip install openai")
+                
+                base_url = os.getenv("LMSTUDIO_BASE_URL", "http://localhost:1234/v1")
+                return OpenAI(
+                    base_url=base_url,
+                    api_key="lm-studio"  # LM Studio doesn't need real key
+                )
+            
             else:
                 print(f"⚠️  Warning: Unknown LLM provider '{provider}'. Using fallback heuristics.")
                 return None
@@ -174,6 +184,8 @@ class MTGAgent:
             return os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")
         elif provider == "ollama":
             return os.getenv("OLLAMA_MODEL", "llama3.1")
+        elif provider == "lmstudio":
+            return os.getenv("LMSTUDIO_MODEL", "local-model")
         else:
             return "unknown"
     

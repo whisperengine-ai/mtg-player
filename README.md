@@ -50,7 +50,7 @@ Credit: Inspired by Discord User "SkillsMcGee" (210509006043742208)
 
 ### Prerequisites
 - Python 3.11+
-- OpenAI API key (or Anthropic, or local Ollama)
+- OpenAI API key (or Anthropic, or local Ollama/LM Studio)
 
 ### Installation
 
@@ -129,6 +129,32 @@ PYTHONPATH=./src python src/main.py --verbose
 - 🎯 **Performance**: ~70-80% as effective as LLM in current implementation (see [ARCHITECTURE.md](ARCHITECTURE.md) for detailed analysis)
 
 > **Note**: The heuristic AI is surprisingly effective because MTG has constrained action spaces (limited legal moves at any time). The LLM's advantages are mainly in complex board evaluation, political decisions in multiplayer, and creative line-finding. See the "Heuristic vs LLM" section in [ARCHITECTURE.md](ARCHITECTURE.md) for a full comparison.
+
+### LLM Provider Options
+
+The project supports multiple LLM providers, configured via the `.env` file:
+
+**Cloud Providers:**
+- **OpenAI** (GPT-4, GPT-3.5): Set `LLM_PROVIDER=openai` and configure `OPENAI_API_KEY`
+- **Anthropic** (Claude): Set `LLM_PROVIDER=anthropic` and configure `ANTHROPIC_API_KEY`
+- **OpenRouter** (Multi-provider gateway): Set `LLM_PROVIDER=openrouter` and configure `OPENROUTER_API_KEY`
+
+**Local Providers:**
+- **Ollama**: Run models locally via Ollama. Set `LLM_PROVIDER=ollama` and configure `OLLAMA_BASE_URL` (default: `http://localhost:11434`)
+- **LM Studio**: Run models locally via LM Studio's OpenAI-compatible server. Set `LLM_PROVIDER=lmstudio` and configure `LMSTUDIO_BASE_URL` (default: `http://localhost:1234/v1`)
+
+**Example `.env` configuration for LM Studio:**
+```bash
+LLM_PROVIDER=lmstudio
+LMSTUDIO_BASE_URL=http://localhost:1234/v1
+LMSTUDIO_MODEL=local-model  # Use your loaded model's name from LM Studio
+```
+
+See `.env.example` for all configuration options.
+
+**Setup Guides:**
+- [LM Studio Setup Guide](LMSTUDIO_SETUP.md) - Run models locally with zero API costs
+- [OpenRouter Setup Guide](OPENROUTER_SETUP.md) - Access multiple LLM providers through one API
 
 ### Logging
 
@@ -277,6 +303,8 @@ deck = create_simple_deck(commander_card=None, archetype="control")
 - [MTG Comprehensive Rules](https://magic.wizards.com/en/rules)
 - [Scryfall API](https://scryfall.com/docs/api) - Card data
 - [OpenAI Function Calling](https://platform.openai.com/docs/guides/function-calling)
+- [LM Studio](https://lmstudio.ai) - Run LLMs locally
+- [Ollama](https://ollama.ai) - Another local LLM option
 
 ## 🤝 Contributing
 
