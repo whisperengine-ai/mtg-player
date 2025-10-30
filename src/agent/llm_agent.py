@@ -15,7 +15,7 @@ from tools.game_tools import (
     GetStackStateTool,
     CanRespondTool
 )
-from tools.evaluation_tools import EvaluatePositionTool
+from tools.evaluation_tools import EvaluatePositionTool, CanIWinTool
 from agent.prompts import SYSTEM_PROMPT, DECISION_PROMPT, MAIN_PHASE_PROMPT, COMBAT_PROMPT
 
 # LLM client imports
@@ -226,6 +226,9 @@ class MTGAgent:
         evaluate_position = EvaluatePositionTool()
         evaluate_position.game_state = self.game_state
         
+        can_i_win = CanIWinTool()
+        can_i_win.game_state = self.game_state
+        
         return {
             "get_game_state": get_game_state,
             "get_legal_actions": get_legal_actions,
@@ -233,7 +236,8 @@ class MTGAgent:
             "analyze_threats": analyze_threats,
             "get_stack_state": get_stack_state,
             "can_respond": can_respond,
-            "evaluate_position": evaluate_position
+            "evaluate_position": evaluate_position,
+            "can_i_win": can_i_win
         }
     
     def _get_tool_schemas(self) -> List[Dict[str, Any]]:
@@ -346,6 +350,18 @@ class MTGAgent:
                 "function": {
                     "name": "evaluate_position",
                     "description": "Evaluate the current game position and get a strategic assessment. Returns a score (0.0-1.0), position status (winning/losing/even), and detailed breakdown of life totals, board state, mana, card advantage, and threats. Use this to make strategic decisions and assess whether you're ahead or behind.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {},
+                        "required": []
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "can_i_win",
+                    "description": "Analyze if you can deal lethal damage this turn. Calculates total damage from attacking creatures and instant-speed spells in hand. Returns whether lethal is possible, total damage potential, and the attack line. Use this when you think you might be able to close out the game.",
                     "parameters": {
                         "type": "object",
                         "properties": {},

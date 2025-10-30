@@ -32,7 +32,7 @@ class EvaluatePositionTool:
             }
         }
     
-    def execute(self, player_id: str = None) -> Dict[str, Any]:
+    def execute(self, player_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Evaluate position for a player.
         
@@ -319,3 +319,260 @@ class EvaluatePositionTool:
             summary_parts.append(f"Weaknesses: {', '.join(weaknesses)}.")
         
         return " ".join(summary_parts)
+
+
+class CanIWinTool:
+    """Analyze if the active player can achieve lethal this turn."""
+    
+    def __init__(self):
+        self.game_state: Optional[Any] = None  # Will be set by agent
+    
+    def get_schema(self) -> Dict[str, Any]:
+        """Return tool schema for LLM."""
+        return {
+            "type": "function",
+            "function": {
+                "name": "can_i_win",
+                "description": "Analyze if you can deal lethal damage this turn. Calculates total damage from attacking creatures and instant-speed spells in hand. Returns whether lethal is possible, total damage potential, and the attack line.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "player_id": {
+                            "type": "string",
+                            "description": "ID of the player to check (optional, defaults to active player)"
+                        }
+                    },
+                    "required": []
+                }
+            }
+        }
+    
+    def execute(self, player_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Check if player can deal lethal damage this turn.
+        
+        Args:
+            player_id: ID of player to evaluate (defaults to active player)
+            
+        Returns:
+            Dictionary with:
+            - can_win: True/False
+            - damage: Total damage potential
+            - life_needed: Opponent life to reach lethal
+            - line: Attack/spell sequence to reach lethal
+            - considerations: Warnings or notes
+        """
+        if not self.game_state:
+            return {"error": "Game state not available"}
+        
+        # Get player to evaluate
+        if player_id:
+            player = next((p for p in self.game_state.players if p.id == player_id), None)
+            if not player:
+                return {"error": f"Player {player_id} not found"}
+        else:
+            player = self.game_state.get_active_player()
+            if not player:
+                return {"error": "No active player"}
+        
+        # Get all opponents
+        opponents = [p for p in self.game_state.players if p.id != player.id and p.life > 0]
+        if not opponents:
+            return {
+                "success": True,
+                "can_win": False,
+                "damage": 0,
+                "reason": "No opponents to attack"
+            }
+        
+        # Calculate damage sources
+        creature_damage = self._calculate_creature_damage(player)
+        spell_damage = self._calculate_spell_damage(player)
+        total_damage = creature_damage["damage"] + spell_damage["damage"]
+        
+        # Check each opponent for lethal
+        # Find all possible lethal targets, then pick the one that makes most sense
+        # (weakest opponent = highest priority target in multiplayer)
+        lethal_targets = []
+        for opponent in opponents:
+            if total_damage >= opponent.life:
+                lethal_targets.append(opponent)
+        
+        # Sort by life total (lowest life = weakest opponent = best target)
+        lethal_targets.sort(key=lambda p: p.life)
+        lethal_target = lethal_targets[0] if lethal_targets else None
+        
+        # Build line description
+        line_parts = []
+        if creature_damage["damage"] > 0:
+            line_parts.append(f"Attack with {creature_damage['count']} creatures ({creature_damage['damage']} damage)")
+        if spell_damage["damage"] > 0:
+            line_parts.append(f"Cast {spell_damage['count']} spells ({spell_damage['damage']} damage)")
+        
+        line = " + ".join(line_parts) if line_parts else "No damage sources available"
+        
+        # Generate considerations
+        considerations = []
+        if not self._are_all_creatures_ready(player):
+            considerations.append("Not all creatures are ready to attack (check summoning sickness)")
+        
+        if spell_damage["damage"] > 0:
+            available_mana = player.available_mana().total()
+            if spell_damage["min_mana_needed"] > available_mana:
+                considerations.append(f"Not enough mana for all damage spells (need {spell_damage['min_mana_needed']}, have {available_mana})")
+        
+        return {
+            "success": True,
+            "player_id": player.id,
+            "player_name": player.name,
+            "can_win": lethal_target is not None,
+            "lethal_target": lethal_target.name if lethal_target else None,
+            "damage": total_damage,
+            "damage_breakdown": {
+                "creatures": creature_damage["damage"],
+                "spells": spell_damage["damage"]
+            },
+            "line": line,
+            "creatures_attacking": creature_damage["count"],
+            "spells_to_cast": spell_damage["count"],
+            "considerations": considerations,
+            "summary": self._generate_summary(lethal_target, total_damage, line)
+        }
+    
+    def _calculate_creature_damage(self, player: Any) -> Dict[str, Any]:
+        """
+        Calculate maximum damage from creatures that can attack.
+        
+        Returns:
+            dict with 'damage', 'count', and 'creatures' list
+        """
+        total_damage = 0
+        count = 0
+        creatures = []
+        
+        for creature in player.creatures_in_play():
+            # Check if creature can attack
+            if not creature.can_attack():
+                continue
+            
+            power = creature.current_power()
+            if power > 0:
+                total_damage += power
+                count += 1
+                creatures.append({
+                    "name": creature.card.name,
+                    "power": power
+                })
+        
+        return {
+            "damage": total_damage,
+            "count": count,
+            "creatures": creatures
+        }
+    
+    def _calculate_spell_damage(self, player: Any) -> Dict[str, Any]:
+        """
+        Calculate maximum damage from spells in hand.
+        
+        Looks for damage spells that can be cast instantly or are sorceries.
+        Returns damage from direct damage spells.
+        
+        Returns:
+            dict with 'damage', 'count', 'min_mana_needed', and 'spells' list
+        """
+        total_damage = 0
+        count = 0
+        min_mana_needed = 0
+        spells = []
+        
+        available_mana = player.available_mana().total()
+        
+        for spell in player.hand:
+            card = spell.card
+            
+            # Skip lands
+            if card.is_land():
+                continue
+            
+            # Look for damage-dealing spells
+            damage = self._extract_damage_from_card(card)
+            
+            if damage > 0:
+                mana_cost = card.mana_cost.total()
+                
+                # Only include if we might be able to afford it
+                if mana_cost <= available_mana:
+                    total_damage += damage
+                    min_mana_needed += mana_cost
+                    count += 1
+                    spells.append({
+                        "name": card.name,
+                        "damage": damage,
+                        "cost": mana_cost
+                    })
+        
+        return {
+            "damage": total_damage,
+            "count": count,
+            "min_mana_needed": min_mana_needed,
+            "spells": spells
+        }
+    
+    def _extract_damage_from_card(self, card: Any) -> int:
+        """
+        Extract direct damage value from card text.
+        
+        Looks for common damage patterns:
+        - "Lightning Bolt" → 3
+        - "deals 5 damage" → 5
+        - "target opponent loses X life" → X (approximate)
+        """
+        oracle_text = card.oracle_text.lower()
+        
+        # Common damage spells
+        if "lightning bolt" in card.name.lower():
+            return 3
+        if "shock" in card.name.lower():
+            return 2
+        if "fireball" in card.name.lower():
+            return 5  # Variable, assume 5 for lethal check
+        
+        # Look for "deals X damage" pattern
+        import re
+        
+        # Match "deals X damage"
+        match = re.search(r'deals (\d+) damage', oracle_text)
+        if match:
+            return int(match.group(1))
+        
+        # Match "target opponent loses X life"
+        match = re.search(r'target opponent loses (\d+) life', oracle_text)
+        if match:
+            return int(match.group(1))
+        
+        # Match variable damage (X in the cost)
+        if "damage to" in oracle_text or "damage equal to" in oracle_text:
+            # Conservative estimate - these need analysis
+            return 0
+        
+        return 0
+    
+    def _are_all_creatures_ready(self, player: Any) -> bool:
+        """Check if all attacking creatures are ready (not summoning sick, not tapped)."""
+        for creature in player.creatures_in_play():
+            if creature.can_attack():
+                return True
+        return False
+    
+    def _generate_summary(self, lethal_target: Any, damage: int, line: str) -> str:
+        """Generate human-readable summary."""
+        if lethal_target:
+            return (
+                f"YES! You can win this turn! Deal {damage} damage to {lethal_target.name} "
+                f"(they have {lethal_target.life} life). {line}"
+            )
+        else:
+            return (
+                f"You cannot reach lethal this turn. Maximum damage available: {damage}. "
+                f"{line}"
+            )
