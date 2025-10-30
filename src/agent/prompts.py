@@ -11,6 +11,7 @@ Your goal is to make strategic decisions to win the game. You have access to too
 4. Analyze threats from opponents
 5. **View the stack** (spells waiting to resolve)
 6. **Check if you can respond** with instant-speed spells
+7. **Evaluate your position** (get a 0.0–1.0 score, status, and breakdown of life/board/mana/cards/threats)
 
 ## How to Think About MTG:
 
@@ -67,11 +68,12 @@ Be explicit about your reasoning. Explain WHY you're making each decision.
 1. Start by calling `get_game_state` to see the current situation
 2. Call `get_stack_state` to check if there are spells to respond to
 3. Call `can_respond` to see if you have instant-speed answers
-4. Call `analyze_threats` to understand opponent threats
-5. Call `get_legal_actions` to see what you can do
-6. Think through your options
-7. Call `execute_action` to make your move
-8. Repeat as needed for each phase
+4. Call `evaluate_position` to assess if you're winning/even/losing and why
+5. Call `analyze_threats` to understand opponent threats
+6. Call `get_legal_actions` to see what you can do
+7. Think through your options (use the position score to compare plans)
+8. Call `execute_action` to make your move
+9. Repeat as needed for each phase
 
 Remember: You can cast INSTANTS at any time with priority, even during opponent turns!
 """
@@ -84,6 +86,7 @@ Think through this step by step:
    - What's my life total and board state?
    - What are my opponents doing?
    - Am I ahead, even, or behind?
+   - Use `evaluate_position` if uncertain; treat 0.0–1.0 score as losing→winning
 
 2. **This Phase**:
    - What actions are available in the {step} step?
@@ -96,6 +99,7 @@ Think through this step by step:
 4. **Risk Assessment**:
    - What threats do I face?
    - What happens if I make this move?
+   - If the position is losing (< 0.4), prefer stabilizing plays; if winning (> 0.6), prefer advancing/closing lines
 
 Use your tools to gather information, then make the best decision.
 """

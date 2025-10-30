@@ -646,6 +646,21 @@ class MTGAgent:
         if self.verbose and threats:
             print(f"⚠️  Identified {len(threats)} threats")
         
+        # Step 3.5: Evaluate overall position (new tool)
+        position_score = None
+        try:
+            eval_tool = self.tools.get("evaluate_position")
+            if eval_tool:
+                eval_result = eval_tool.execute()
+                self._position_eval = eval_result  # cache for visibility/debugging
+                position_score = eval_result.get("score")
+                position_status = eval_result.get("position")
+                if self.verbose and position_score is not None:
+                    print(f"📊 Position: {position_status or 'unknown'} ({position_score:.2f})")
+        except Exception:
+            # Do not block heuristic flow if evaluation fails
+            position_score = None
+        
         # Step 4: Get legal actions
         legal_actions_tool = self.tools["get_legal_actions"]
         actions_result = legal_actions_tool.execute()
@@ -669,11 +684,11 @@ class MTGAgent:
         
         # Only make decisions during interactive steps
         if step == "main":
-            decision = self._decide_main_phase(actions, active_player, threats)
+            decision = self._decide_main_phase(actions, active_player, threats, position_score)
         elif step == "declare_attackers":
-            decision = self._decide_attackers(actions, active_player, threats)
+            decision = self._decide_attackers(actions, active_player, threats, position_score)
         elif step == "declare_blockers":
-            decision = self._decide_blockers(actions, active_player, threats)
+            decision = self._decide_blockers(actions, active_player, threats, position_score)
         else:
             # For non-interactive steps (untap, upkeep, draw, end step, cleanup, etc.)
             # Check if we can respond with instants
@@ -695,7 +710,7 @@ class MTGAgent:
         
         return decision
     
-    def _decide_main_phase(self, actions: list, active_player, threats: list) -> Dict[str, Any]:
+    def _decide_main_phase(self, actions: list, active_player, threats: list, position_score: float | None = None) -> Dict[str, Any]:
         """Decide what to do during main phase - demonstrates strategic thinking."""
         # Priority 1: Play a land if we haven't yet
         land_actions = [a for a in actions if a["type"] == "play_land"]
@@ -787,7 +802,7 @@ class MTGAgent:
         
         return {"type": "pass", "reasoning": "End of main phase"}
     
-    def _decide_attackers(self, actions: list, active_player, threats: list) -> Dict[str, Any]:
+    def _decide_attackers(self, actions: list, active_player, threats: list, position_score: float | None = None) -> Dict[str, Any]:
         """Decide which creatures to attack with - demonstrates combat logic."""
         attack_actions = [a for a in actions if a["type"] == "declare_attacker"]
         
@@ -800,16 +815,26 @@ class MTGAgent:
         # Apply aggression strategy to determine which creatures should attack
         attackers_declared = []
         
+        # Adjust aggression based on evaluated position if available
+        local_aggression = self.aggression
+        if position_score is not None:
+            if position_score >= 0.6:
+                local_aggression = "aggressive"
+            elif position_score <= 0.4:
+                local_aggression = "conservative"
+            else:
+                local_aggression = "balanced"
+
         for action in attack_actions:
             attacker_power = action.get("power", 0)
             
             # Determine if we should attack based on aggression level
             should_attack = False
             
-            if self.aggression == "aggressive":
+            if local_aggression == "aggressive":
                 # Always attack with everything
                 should_attack = True
-            elif self.aggression == "balanced":
+            elif local_aggression == "balanced":
                 # Attack with power 2+ or when at/below 30 life
                 should_attack = attacker_power >= 2 or active_player.life <= 30
             else:  # conservative
@@ -827,11 +852,11 @@ class MTGAgent:
                     "balanced": "Attacking",
                     "conservative": "Carefully attacking"
                 }
-                print(f"⚔️  {aggression_msg.get(self.aggression, 'Attacking')} with {len(attackers_declared)} creatures")
+                print(f"⚔️  {aggression_msg.get(local_aggression, 'Attacking')} with {len(attackers_declared)} creatures")
             return {
                 "type": "declare_attacker",
                 "count": len(attackers_declared),
-                "reasoning": f"{self.aggression.capitalize()} strategy: attacking with {len(attackers_declared)} creatures"
+                "reasoning": f"{local_aggression.capitalize()} strategy: attacking with {len(attackers_declared)} creatures"
             }
         else:
             # Decided not to attack - pass
@@ -845,7 +870,7 @@ class MTGAgent:
                 "reasoning": "Holding creatures back - attack too risky"
             }
     
-    def _decide_blockers(self, actions: list, active_player, threats: list) -> Dict[str, Any]:
+    def _decide_blockers(self, actions: list, active_player, threats: list, position_score: float | None = None) -> Dict[str, Any]:
         """Decide how to block - demonstrates defensive logic."""
         block_actions = [a for a in actions if a["type"] == "declare_blocker"]
         

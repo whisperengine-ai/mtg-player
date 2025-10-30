@@ -44,11 +44,14 @@ def test_agent_initialization_no_llm(game_setup):
     
     assert agent.game_state == game_state
     assert agent.rules_engine == rules_engine
-    assert len(agent.tools) == 6  # Updated: Now includes get_stack_state and can_respond
+    assert len(agent.tools) == 7  # Updated: includes get_stack_state, can_respond, evaluate_position
     assert "get_game_state" in agent.tools
     assert "get_legal_actions" in agent.tools
     assert "execute_action" in agent.tools
     assert "analyze_threats" in agent.tools
+    assert "get_stack_state" in agent.tools
+    assert "can_respond" in agent.tools
+    assert "evaluate_position" in agent.tools
 
 
 def test_agent_tools_setup(game_setup):
@@ -125,7 +128,7 @@ def test_llm_tool_schemas(game_setup):
     agent = MTGAgent(game_state, rules_engine, verbose=False)
     schemas = agent._get_tool_schemas()
     
-    assert len(schemas) == 6  # Updated: Now includes get_stack_state and can_respond
+    assert len(schemas) == 7  # Updated: includes get_stack_state, can_respond, evaluate_position
     
     # Check each schema has required fields
     for schema in schemas:
@@ -140,6 +143,10 @@ def test_llm_tool_schemas(game_setup):
     params = execute_schema["function"]["parameters"]
     assert "action" in params["properties"]
     assert "type" in params["properties"]["action"]["properties"]
+
+    # Confirm evaluate_position schema exists
+    eval_schema = next(s for s in schemas if s["function"]["name"] == "evaluate_position")
+    assert eval_schema["function"]["parameters"]["type"] == "object"
 
 
 def test_tool_execution_with_error(game_setup):
