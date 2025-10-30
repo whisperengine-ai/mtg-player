@@ -148,7 +148,7 @@ def play_game(game_state, rules_engine, max_full_turns=10, verbose=True, use_llm
     # Set up loggers
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     game_id = f"{timestamp}_{game_state.game_id[:8]}"
-    game_logger, llm_logger = setup_loggers(game_id)
+    game_logger, llm_logger, heuristic_logger = setup_loggers(game_id)
     
     # Log game setup
     game_logger.log_game_state({
@@ -165,7 +165,7 @@ def play_game(game_state, rules_engine, max_full_turns=10, verbose=True, use_llm
         print("🎲 GAME START")
         if not use_llm:
             print("🎲 Running in HEURISTIC MODE (no LLM calls)")
-        print(f"📝 Logs saved to: logs/game_{game_id}.log and logs/llm_{game_id}.log")
+        print(f"📝 Logs saved to: logs/game_{game_id}.log, logs/llm_{game_id}.log, logs/heuristic_{game_id}.log")
         print(f"{'='*60}\n")
         print(game_state)
 
@@ -175,6 +175,7 @@ def play_game(game_state, rules_engine, max_full_turns=10, verbose=True, use_llm
         rules_engine=rules_engine, 
         verbose=verbose, 
         llm_logger=llm_logger,
+        heuristic_logger=heuristic_logger,
         use_llm=use_llm,
         aggression=aggression
     ) for p in game_state.players}

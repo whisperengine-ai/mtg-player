@@ -68,12 +68,16 @@ mtg-player/
 │   ├── 🔧 tools/                    # LLM tool interface
 │   │   ├── __init__.py
 │   │   │
-│   │   └── game_tools.py            # Tool implementations
-│   │       ├── Tool base class
-│   │       ├── GetGameStateTool
-│   │       ├── GetLegalActionsTool
-│   │       ├── ExecuteActionTool
-│   │       └── AnalyzeThreatsTool
+│   │   ├── game_tools.py            # Tool implementations
+│   │   │   ├── Tool base class
+│   │   │   ├── GetGameStateTool
+│   │   │   ├── GetLegalActionsTool
+│   │   │   ├── ExecuteActionTool
+│   │   │   ├── AnalyzeThreatsTool
+│   │   │   ├── GetStackStateTool
+│   │   │   └── CanRespondTool
+│   │   └── evaluation_tools.py      # Strategic analysis tools
+│   │       └── EvaluatePositionTool (score/status/breakdown)
 │   │
 │   └── 📦 data/                     # Card database
 │       ├── __init__.py

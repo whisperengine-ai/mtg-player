@@ -215,7 +215,78 @@ class LLMLogger:
         self.logger.info("-" * 80)
 
 
-def setup_loggers(game_id: str, log_base_dir: str = "logs") -> tuple[GameLogger, LLMLogger]:
+class HeuristicLogger:
+    """Logger for heuristic (non-LLM) decision making runs."""
+
+    def __init__(self, log_dir: Path, game_id: str):
+        self.log_dir = log_dir
+        self.game_id = game_id
+        self.log_file = log_dir / f"heuristic_{game_id}.log"
+
+        # Ensure log directory exists
+        self.log_dir.mkdir(parents=True, exist_ok=True)
+
+        # Set up file logger
+        self.logger = logging.getLogger(f"heuristic_{game_id}")
+        self.logger.setLevel(logging.DEBUG)
+
+        # Clear any existing handlers
+        self.logger.handlers.clear()
+
+        fh = logging.FileHandler(self.log_file)
+        fh.setLevel(logging.DEBUG)
+        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+        fh.setFormatter(formatter)
+        self.logger.addHandler(fh)
+
+        self.logger.info("Heuristic Logger initialized for game: %s", game_id)
+
+    def log_context(self, player_name: str, turn: int, phase: str, step: str, threats_count: int, actions_count: int):
+        self.logger.info("=" * 80)
+        self.logger.info("HEURISTIC | %s | Turn %s | %s/%s", player_name, turn, phase, step)
+        self.logger.info("Threats observed: %s | Legal actions: %s", threats_count, actions_count)
+
+    def log_tool_execution(self, tool_name: str, args: Dict[str, Any], result: Dict[str, Any]):
+        self.logger.info("TOOL EXEC | %s", tool_name)
+        try:
+            self.logger.debug("  Args: %s", json.dumps(args, indent=2))
+        except Exception:
+            self.logger.debug("  Args: %s", args)
+        try:
+            result_json = json.dumps(result, indent=2)
+            self.logger.info("  Result:")
+            for line in result_json.split('\n'):
+                self.logger.info("    %s", line)
+        except Exception:
+            self.logger.info("  Result: %s", result)
+
+    def log_position(self, eval_result: Dict[str, Any]):
+        score = eval_result.get("score")
+        status = eval_result.get("position")
+        if isinstance(score, (int, float)):
+            self.logger.info("POSITION | %s (%.2f)", status, score)
+        else:
+            self.logger.info("POSITION | %s", status)
+        # Log full breakdown if available
+        breakdown = eval_result.get("breakdown")
+        if breakdown:
+            try:
+                self.logger.info("Breakdown: %s", json.dumps(breakdown, indent=2))
+            except Exception:
+                self.logger.info("Breakdown: %s", breakdown)
+        if eval_result.get("summary"):
+            self.logger.info("Summary: %s", eval_result['summary'])
+
+    def log_decision(self, player_name: str, decision: Dict[str, Any]):
+        self.logger.info("-" * 80)
+        self.logger.info("DECISION | %s", player_name)
+        self.logger.info("  Action: %s", decision.get('type', 'unknown'))
+        if decision.get('reasoning'):
+            self.logger.info("  Reasoning: %s", decision['reasoning'])
+        self.logger.info("-" * 80)
+
+
+def setup_loggers(game_id: str, log_base_dir: str = "logs") -> tuple[GameLogger, LLMLogger, HeuristicLogger]:
     """
     Set up game and LLM loggers for a game session.
     
@@ -224,12 +295,13 @@ def setup_loggers(game_id: str, log_base_dir: str = "logs") -> tuple[GameLogger,
         log_base_dir: Base directory for logs (default: "logs")
     
     Returns:
-        Tuple of (GameLogger, LLMLogger)
+        Tuple of (GameLogger, LLMLogger, HeuristicLogger)
     """
     log_dir = Path(log_base_dir)
     log_dir.mkdir(parents=True, exist_ok=True)
     
     game_logger = GameLogger(log_dir, game_id)
     llm_logger = LLMLogger(log_dir, game_id)
-    
-    return game_logger, llm_logger
+    heuristic_logger = HeuristicLogger(log_dir, game_id)
+
+    return game_logger, llm_logger, heuristic_logger

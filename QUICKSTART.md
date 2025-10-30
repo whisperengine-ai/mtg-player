@@ -112,7 +112,7 @@ That's it! The AI will play a game using LLM reasoning.
 
 ============================================================
 🎲 GAME START
-📝 Logs saved to: logs/game_20251030_054257.log and logs/llm_20251030_054257.log
+📝 Logs saved to: logs/game_20251030_054257.log, logs/llm_20251030_054257.log, logs/heuristic_20251030_054257.log
 ============================================================
 
 Turn 1 - Player 1 (Ramp)'s turn
@@ -127,6 +127,7 @@ Creatures: 0
 **Log files** (in `logs/` directory):
 - `game_YYYYMMDD_HHMMSS_gameid.log` - Turn progression, actions, phase changes
 - `llm_YYYYMMDD_HHMMSS_gameid.log` - Complete LLM prompts, responses, reasoning, tool calls
+- `heuristic_YYYYMMDD_HHMMSS_gameid.log` - Heuristic-only context, position evaluation, and decisions
 
 ## Next Steps
 

@@ -54,7 +54,7 @@ All logs are saved to the `logs/` directory with timestamped filenames:
 2025-10-30 05:42:57,571 - INFO -     
 2025-10-30 05:42:57,571 - INFO -     Think through this step by step...
 2025-10-30 05:42:57,571 - INFO - --------------------------------------------------------------------------------
-2025-10-30 05:42:57,571 - INFO - TOOLS: 6 available
+2025-10-30 05:42:57,571 - INFO - TOOLS: 7 available
 2025-10-30 05:42:57,571 - DEBUG -   - get_game_state
 2025-10-30 05:42:57,571 - DEBUG -   - get_legal_actions
 2025-10-30 05:42:57,571 - DEBUG -   - execute_action
@@ -70,6 +70,39 @@ All logs are saved to the `logs/` directory with timestamped filenames:
 2025-10-30 05:43:03,392 - INFO -   - can_respond({})
 2025-10-30 05:43:03,392 - INFO -   - analyze_threats({})
 2025-10-30 05:43:03,392 - INFO -   - get_legal_actions({})
+2025-10-30 05:43:03,392 - INFO -   - evaluate_position({})
+### Heuristic Logs
+**File**: `logs/heuristic_YYYYMMDD_HHMMSS_gameid.log`
+
+Used only when running with `--no-llm` (heuristic mode). This log cleanly separates non-LLM decision flow from LLM logs.
+
+**Contains**:
+- Decision context: player, turn, phase/step
+- Threats observed and legal actions count
+- Position evaluation: score, status, breakdown, summary
+- Tool executions relevant to heuristics
+- Final decision with reasoning
+
+**Example**:
+```
+2025-10-30 05:42:57,571 - INFO - Heuristic Logger initialized for game: 963c7491
+2025-10-30 05:42:57,571 - INFO - ================================================================================================
+2025-10-30 05:42:57,571 - INFO - HEURISTIC | Player 1 (Ramp) | Turn 1 | beginning/main
+2025-10-30 05:42:57,571 - INFO - Threats observed: 0 | Legal actions: 3
+2025-10-30 05:42:59,456 - INFO - TOOL EXEC | evaluate_position
+2025-10-30 05:42:59,456 - INFO -   Result:
+2025-10-30 05:42:59,456 - INFO -     {
+2025-10-30 05:42:59,456 - INFO -       "score": 0.58,
+2025-10-30 05:42:59,456 - INFO -       "position": "even",
+2025-10-30 05:42:59,456 - INFO -       "breakdown": { "life": 0.9, "board": 0.1, ... },
+2025-10-30 05:42:59,456 - INFO -       "summary": "You're slightly ahead on life but behind on board..."
+2025-10-30 05:42:59,456 - INFO -     }
+2025-10-30 05:42:59,456 - INFO - POSITION | even (0.58)
+2025-10-30 05:43:03,392 - INFO - --------------------------------------------------------------------------------
+2025-10-30 05:43:03,392 - INFO - DECISION | Player 1 (Ramp)
+2025-10-30 05:43:03,392 - INFO -   Action: play_land
+2025-10-30 05:43:03,392 - INFO -   Reasoning: Ramping: Playing land for mana development
+```
 2025-10-30 05:43:03,392 - INFO - Token Usage:
 2025-10-30 05:43:03,392 - INFO -   Prompt: 245
 2025-10-30 05:43:03,392 - INFO -   Completion: 150
@@ -116,7 +149,7 @@ This keeps the console output clean and readable while capturing all details in 
 
 ## Logging Architecture
 
-### Two Loggers
+### Three Loggers
 
 **GameLogger** (`src/utils/logger.py`):
 - Tracks game events
@@ -125,6 +158,10 @@ This keeps the console output clean and readable while capturing all details in 
 - Writes to file only (no console)
 
 **LLMLogger** (`src/utils/logger.py`):
+**HeuristicLogger** (`src/utils/logger.py`):
+- Captures heuristic (non-LLM) decision flow
+- Records context, position evaluation, and final decisions
+- Writes to its own file for clean separation
 - Captures all LLM API calls
 - Records complete prompts and responses
 - Logs tool calls and results
@@ -201,11 +238,11 @@ from utils.logger import setup_loggers
 # Create unique game ID
 game_id = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{str(uuid.uuid4())[:8]}"
 
-# Initialize both loggers
-game_logger, llm_logger = setup_loggers(game_id)
+# Initialize loggers (game, LLM, heuristic)
+game_logger, llm_logger, heuristic_logger = setup_loggers(game_id)
 
 # Pass to game loop and agent
-agents = {p.id: MTGAgent(..., llm_logger=llm_logger) for p in players}
+agents = {p.id: MTGAgent(..., llm_logger=llm_logger, heuristic_logger=heuristic_logger) for p in players}
 ```
 
 The agent automatically logs all LLM interactions, and the main game loop logs all game events.

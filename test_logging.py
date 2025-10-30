@@ -9,11 +9,19 @@ from utils.logger import setup_loggers
 
 # Test loggers
 game_id = "test_20241030_123456"
-game_logger, llm_logger = setup_loggers(game_id, log_base_dir="logs")
+loggers = setup_loggers(game_id, log_base_dir="logs")
+try:
+    game_logger, llm_logger, heuristic_logger = loggers
+except ValueError:
+    # Backward compatibility if setup_loggers returns only two
+    game_logger, llm_logger = loggers
+    heuristic_logger = None
 
 print(f"✅ Loggers initialized")
 print(f"📝 Game log: logs/game_{game_id}.log")
 print(f"📝 LLM log: logs/llm_{game_id}.log")
+if heuristic_logger:
+    print(f"📝 Heuristic log: logs/heuristic_{game_id}.log")
 
 # Test game logger
 game_logger.log_turn_start(1, "Player 1", "beginning", "untap")
@@ -47,4 +55,9 @@ llm_logger.log_llm_response(
 llm_logger.log_decision("Player 1", {"type": "pass", "reasoning": "No good plays"})
 
 print("✅ LLM log entries written")
+if heuristic_logger:
+    heuristic_logger.log_context("Player 1", 1, "beginning", "main", threats_count=0, actions_count=3)
+    heuristic_logger.log_position({"score": 0.55, "position": "even", "breakdown": {"life": 0.8}})
+    heuristic_logger.log_decision("Player 1", {"type": "pass", "reasoning": "Testing heuristic log"})
+    print("✅ Heuristic log entries written")
 print("\n📖 Check the log files to verify content")

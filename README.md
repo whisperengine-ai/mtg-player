@@ -31,7 +31,9 @@ Credit: Inspired by Discord User "SkillsMcGee" (210509006043742208)
 │  • get_legal_actions()                              │
 │  • execute_action()                                 │
 │  • analyze_threats()                                │
-│  • calculate_lethal()                               │
+│  • get_stack_state()                                │
+│  • can_respond()                                    │
+│  • evaluate_position()                              │
 └─────────────┬───────────────────────────────────────┘
               │
               │ Validated Actions
@@ -167,6 +169,12 @@ The game creates detailed log files in the `logs/` directory:
   - Win/loss conditions
 
 - **LLM logs** (`logs/llm_YYYYMMDD_HHMMSS_gameid.log`)
+- **Heuristic logs** (`logs/heuristic_YYYYMMDD_HHMMSS_gameid.log`)
+  - Only used when running with `--no-llm` / `--heuristic`
+  - Context snapshot per decision point (turn/phase/step, threat/action counts)
+  - Position evaluation (score/status/breakdown/summary)
+  - Tool executions relevant to heuristics
+  - Final decision and reasoning
   - Full prompts sent to the LLM
   - Complete responses (including reasoning/thinking for o-series models)
   - Tool calls and results
@@ -189,7 +197,7 @@ mtg-player/
 ├── ROADMAP.md              # Detailed implementation roadmap
 ├── requirements.txt
 ├── .env.example
-├── logs/                   # Auto-generated game and LLM logs
+├── logs/                   # Auto-generated logs (game, LLM, heuristic)
 ├── src/
 │   ├── main.py            # Entry point (supports archetype decks)
 │   ├── core/
@@ -202,9 +210,10 @@ mtg-player/
 │   │   ├── llm_agent.py   # LLM decision-making agent
 │   │   └── prompts.py     # Prompt templates
 │   ├── tools/
-│   │   └── game_tools.py  # Game state and action tools
+│   │   ├── game_tools.py          # Game state/action/stack/response tools
+│   │   └── evaluation_tools.py    # Position evaluation tool (score/breakdown)
 │   ├── utils/
-│   │   └── logger.py      # Game and LLM logging utilities
+│   │   └── logger.py      # Game, LLM, and Heuristic logging utilities
 │   └── data/
 │       └── cards.py       # Card database + deck builders
 ├── tests/

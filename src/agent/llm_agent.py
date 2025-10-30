@@ -40,6 +40,7 @@ class MTGAgent:
         llm_client: Any = None,
         verbose: bool = False,
         llm_logger: Any = None,
+        heuristic_logger: Any = None,
         use_llm: bool = True,
         aggression: str = "balanced"
     ):
@@ -62,6 +63,7 @@ class MTGAgent:
         self.rules_engine = rules_engine
         self.verbose = verbose
         self.llm_logger = llm_logger
+        self.heuristic_logger = heuristic_logger
         self.use_llm = use_llm
         self.aggression = aggression.lower()
         
@@ -608,7 +610,7 @@ class MTGAgent:
             print(f"Agent Decision Point: {self.game_state.current_phase.value}/{self.game_state.current_step.value}")
             print(f"{'='*60}")
         
-        # Use LLM to make decision (falls back to heuristics if no LLM)
+    # Use LLM to make decision (falls back to heuristics if no LLM)
         action = self._make_llm_decision()
         
         if self.verbose and action:
@@ -616,6 +618,14 @@ class MTGAgent:
             if action.get('reasoning'):
                 print(f"💭 Reasoning: {action['reasoning']}")
         
+        # Log heuristic decisions to separate log if configured
+        if action and not self.use_llm and getattr(self, 'heuristic_logger', None):
+            try:
+                player_name = self.game_state.get_active_player().name
+                self.heuristic_logger.log_decision(player_name, action)
+            except Exception:
+                pass
+
         return action is not None
     
     def _make_simple_decision(self) -> Optional[Dict[str, Any]]:
@@ -655,13 +665,20 @@ class MTGAgent:
                 self._position_eval = eval_result  # cache for visibility/debugging
                 position_score = eval_result.get("score")
                 position_status = eval_result.get("position")
+                # Log to heuristic logger if available
+                if getattr(self, 'heuristic_logger', None):
+                    try:
+                        self.heuristic_logger.log_tool_execution("evaluate_position", {}, eval_result)
+                        self.heuristic_logger.log_position(eval_result)
+                    except Exception:
+                        pass
                 if self.verbose and position_score is not None:
                     print(f"📊 Position: {position_status or 'unknown'} ({position_score:.2f})")
         except Exception:
             # Do not block heuristic flow if evaluation fails
             position_score = None
         
-        # Step 4: Get legal actions
+    # Step 4: Get legal actions
         legal_actions_tool = self.tools["get_legal_actions"]
         actions_result = legal_actions_tool.execute()
         
@@ -678,6 +695,20 @@ class MTGAgent:
         
         if self.verbose:
             print(f"📋 Found {len(actions)} legal actions in {phase}/{step}")
+
+        # Log heuristic context to separate log
+        if getattr(self, 'heuristic_logger', None):
+            try:
+                self.heuristic_logger.log_context(
+                    active_player.name,
+                    self.game_state.turn_number,
+                    phase,
+                    step,
+                    len(threats),
+                    len(actions)
+                )
+            except Exception:
+                pass
         
         # Step 5: Make intelligent decisions based on phase/step
         decision = None
