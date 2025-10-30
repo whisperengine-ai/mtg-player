@@ -354,7 +354,7 @@ class MTGAgent:
                     print(f"🤖 LLM Iteration {iteration + 1}/{max_iterations}")
                 
                 # Call LLM based on provider
-                if self.llm_provider in ["openai", "openrouter", "ollama"]:
+                if self.llm_provider in ["openai", "openrouter", "ollama", "lmstudio"]:
                     # Build base params
                     params: Dict[str, Any] = {
                         "model": self.model,
