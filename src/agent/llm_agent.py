@@ -15,6 +15,7 @@ from tools.game_tools import (
     GetStackStateTool,
     CanRespondTool
 )
+from tools.evaluation_tools import EvaluatePositionTool
 from agent.prompts import SYSTEM_PROMPT, DECISION_PROMPT, MAIN_PHASE_PROMPT, COMBAT_PROMPT
 
 # LLM client imports
@@ -213,13 +214,17 @@ class MTGAgent:
         can_respond.game_state = self.game_state
         can_respond.rules_engine = self.rules_engine
         
+        evaluate_position = EvaluatePositionTool()
+        evaluate_position.game_state = self.game_state
+        
         return {
             "get_game_state": get_game_state,
             "get_legal_actions": get_legal_actions,
             "execute_action": execute_action,
             "analyze_threats": analyze_threats,
             "get_stack_state": get_stack_state,
-            "can_respond": can_respond
+            "can_respond": can_respond,
+            "evaluate_position": evaluate_position
         }
     
     def _get_tool_schemas(self) -> List[Dict[str, Any]]:
@@ -320,6 +325,18 @@ class MTGAgent:
                 "function": {
                     "name": "can_respond",
                     "description": "Check if you can respond to spells on the stack by casting an instant. Returns available instants and recommendations.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {},
+                        "required": []
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "evaluate_position",
+                    "description": "Evaluate the current game position and get a strategic assessment. Returns a score (0.0-1.0), position status (winning/losing/even), and detailed breakdown of life totals, board state, mana, card advantage, and threats. Use this to make strategic decisions and assess whether you're ahead or behind.",
                     "parameters": {
                         "type": "object",
                         "properties": {},
