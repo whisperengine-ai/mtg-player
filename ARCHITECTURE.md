@@ -1598,6 +1598,95 @@ For now, **both modes are valuable**:
 
 ---
 
+## 🧪 Alternative AI Algorithms Worth Exploring
+
+Beyond heuristics and LLMs, several proven AI algorithms could enhance MTG gameplay:
+
+### 1. **Monte Carlo Tree Search (MCTS)** 🌳
+- **What**: Simulate thousands of games, pick move with highest win rate
+- **Used in**: AlphaGo, modern chess engines
+- **Best for MTG**: Combat decisions, tactical optimization, "can I win?" scenarios
+- **Challenges**: Randomness (card draws), slow simulations, needs position evaluation
+
+### 2. **Minimax with Alpha-Beta Pruning** ♟️
+- **What**: Assume opponent plays optimally, search game tree
+- **Used in**: Classic chess engines
+- **Best for MTG**: Combat math, stack interactions
+- **Challenges**: Exponential branching, hidden information, randomness
+
+### 3. **Reinforcement Learning (Deep RL)** 🎮
+- **What**: Learn by playing millions of games, optimize for wins
+- **Used in**: AlphaZero, OpenAI Five (Dota 2)
+- **Best for MTG**: Overall strategy, discovering novel plays
+- **Challenges**: Requires massive training (months, GPUs), black box
+
+### 4. **Neural Networks (Value/Policy)** 🧠
+- **What**: Train networks to evaluate positions or suggest moves
+- **Used in**: Modern game AI
+- **Best for MTG**: Position evaluation, move prioritization
+- **Challenges**: Needs large dataset, expensive training, may not generalize to new cards
+
+### 5. **Bayesian Inference** 📊
+- **What**: Track probabilities of opponent hands based on observations
+- **Used in**: Poker AI
+- **Best for MTG**: Opponent modeling, hidden information
+- **Challenges**: Computationally expensive, needs domain knowledge
+
+### 6. **Genetic Algorithms** 🧬
+- **What**: Evolve strategies through mutation and selection
+- **Used in**: Parameter optimization
+- **Best for MTG**: Tuning heuristic weights, deck optimization
+- **Challenges**: Slow convergence, may overfit
+
+### 7. **Beam Search** 🔦
+- **What**: Breadth-first search keeping only K best branches
+- **Used in**: NLP, planning systems
+- **Best for MTG**: Combo sequencing, spell ordering
+- **Challenges**: May miss optimal line, needs good evaluation
+
+### 8. **Case-Based Reasoning (CBR)** 📚
+- **What**: Store past games, retrieve similar situations
+- **Used in**: Expert systems
+- **Best for MTG**: Learning from replays, pattern matching
+- **Challenges**: Similarity metrics, high dimensionality
+
+### Quick Comparison
+
+| Algorithm | Speed | Quality | Training | MTG Fit | Complexity |
+|-----------|-------|---------|----------|---------|------------|
+| Heuristic | ⚡⚡⚡ | ⭐⭐⭐ | None | ⭐⭐⭐⭐ | Low |
+| LLM | ⚡ | ⭐⭐⭐⭐ | Pre-trained | ⭐⭐⭐ | Medium |
+| MCTS | ⚡⚡ | ⭐⭐⭐⭐ | None | ⭐⭐⭐⭐ | Medium |
+| Minimax | ⚡⚡ | ⭐⭐⭐⭐ | None | ⭐⭐⭐ | Medium |
+| Deep RL | ⚡⚡⚡ | ⭐⭐⭐⭐⭐ | Months | ⭐⭐⭐⭐⭐ | Very High |
+| Neural Nets | ⚡⚡⚡ | ⭐⭐⭐⭐⭐ | Weeks | ⭐⭐⭐⭐⭐ | High |
+| Bayesian | ⚡ | ⭐⭐⭐⭐ | None | ⭐⭐⭐⭐ | High |
+| Genetic | ⚡ | ⭐⭐⭐ | Days | ⭐⭐⭐ | Low |
+
+### Recommended Hybrid Architecture
+
+**Combine algorithms for best results**:
+
+```
+Strategic Layer (LLM)      → Long-term planning, novel situations
+    ↓
+Tactical Layer (MCTS)      → Combat math, short-term optimization
+    ↓
+Modeling Layer (Bayesian)  → Opponent hand inference, risk assessment
+    ↓
+Execution Layer (Rules)    → Validation, state management
+```
+
+### Implementation Roadmap
+
+1. **Phase 1** (Current): Heuristic + LLM ✅
+2. **Phase 2** (1-2 months): Add MCTS for combat
+3. **Phase 3** (2-4 months): Add Bayesian opponent modeling
+4. **Phase 4** (4-6 months): Neural network value function
+5. **Phase 5** (Long-term): Full deep RL self-play
+
+---
+
 ## 🎉 Conclusion
 
 This architecture allows the AI to:
