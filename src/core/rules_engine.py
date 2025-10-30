@@ -19,10 +19,16 @@ class RulesEngine:
         self._pending_cards: dict = {}  # Store cards pending resolution
         # Optional game logger (duck-typed to avoid hard dependency)
         self.game_logger: Optional[Any] = game_logger
+        # Feature flags/config
+        self.turn_summary_enabled: bool = False
 
     def set_game_logger(self, game_logger: Any) -> None:
         """Attach a game logger after initialization."""
         self.game_logger = game_logger
+
+    def set_turn_summary_enabled(self, enabled: bool) -> None:
+        """Enable or disable end-of-turn summary logging."""
+        self.turn_summary_enabled = bool(enabled)
 
     def start_game(self):
         """Initialize the game."""
@@ -68,6 +74,17 @@ class RulesEngine:
             next_idx = current_idx + 1
             
             if next_idx >= len(phase_order):
+                # End of turn: emit per-player summaries if enabled
+                if getattr(self, "turn_summary_enabled", False) and self.game_logger and hasattr(self.game_logger, "log_turn_summary"):
+                    for p in self.game_state.players:
+                        creatures_count = len(p.creatures_in_play())
+                        self.game_logger.log_turn_summary(
+                            self.game_state.turn_number,
+                            p.name,
+                            p.life,
+                            len(p.hand),
+                            creatures_count,
+                        )
                 # End of turn, move to next player
                 self.advance_turn()
             else:

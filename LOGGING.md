@@ -19,6 +19,7 @@ All logs are saved to the `logs/` directory with timestamped filenames:
 	- When a spell is put on the stack
 	- When the top of the stack resolves (with outcome)
 	- Priority pass chain (who passed, who gets priority next, all passed)
+- Turn summaries at end of each turn (per player: life, hand, creatures)
 - Game state snapshots
 - Win/loss conditions
 - Errors and forced phase advances
@@ -38,6 +39,8 @@ All logs are saved to the `logs/` directory with timestamped filenames:
 2025-10-30 05:43:00,203 - INFO - PRIORITY | all passed | action: resolve_top
 2025-10-30 05:43:00,204 - INFO - STACK | RESOLVE | Player 1 (Ramp) | Lightning Bolt | to graveyard
 2025-10-30 05:43:10,012 - INFO - LIFE | Player 2 (Control) | -3 -> 37 | combat damage from Commander Bear
+2025-10-30 05:43:10,500 - INFO - TURN SUMMARY | 1 | Player 1 (Ramp) | Life: 40 | Hand: 7 | Creatures: 0
+2025-10-30 05:43:10,500 - INFO - TURN SUMMARY | 1 | Player 2 (Control) | Life: 37 | Hand: 7 | Creatures: 0
 2025-10-30 05:43:15,789 - INFO - GAME END | Winner: Player 1 (Ramp) | Reason: all opponents eliminated
 ```
 

@@ -118,6 +118,17 @@ class GameLogger:
         """
         self.logger.info("PRIORITY | all passed | action: %s", action)
 
+    def log_turn_summary(self, turn: int, player_name: str, life: int, hand_size: int, creatures_count: int):
+        """Log per-player summary at end of turn."""
+        self.logger.info(
+            "TURN SUMMARY | %d | %s | Life: %d | Hand: %d | Creatures: %d",
+            turn,
+            player_name,
+            life,
+            hand_size,
+            creatures_count,
+        )
+
 
 class LLMLogger:
     """Logger for LLM interactions and prompts."""

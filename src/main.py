@@ -352,6 +352,13 @@ def main():
             print(f"🔁 RNG seeded with {seed}")
         except Exception:
             print("⚠️  Failed to set RNG seed; continuing without seeding.")
+
+    # Turn summary logging flag (default: enabled)
+    turn_summaries = True
+    if "--no-turn-summaries" in sys.argv:
+        turn_summaries = False
+    if "--turn-summaries" in sys.argv:
+        turn_summaries = True
     
     # Show help if requested
     if "--help" in sys.argv or "-h" in sys.argv:
@@ -367,7 +374,9 @@ Options:
                             conservative: Only attack with power 3+ or when desperate
                             balanced: Attack with power 2+ or when at 30 life or below
                             aggressive: Attack with ALL creatures every turn
-    --seed=N                  Seed Python RNG for reproducible shuffles and decisions
+  --seed=N                  Seed Python RNG for reproducible shuffles and decisions
+  --no-turn-summaries       Disable end-of-turn summaries in game log
+  --turn-summaries          Enable end-of-turn summaries in game log (default)
   --help, -h                Show this help message
 
 Examples:
@@ -385,6 +394,9 @@ For more information, see README.md and QUICKSTART.md
     
     # Set up and play game
     game_state, rules_engine = setup_game(num_players=num_players, verbose=verbose)
+    # Configure end-of-turn summaries
+    if hasattr(rules_engine, "set_turn_summary_enabled"):
+        rules_engine.set_turn_summary_enabled(turn_summaries)
     play_game(game_state, rules_engine, max_full_turns=max_turns, verbose=verbose, use_llm=not no_llm, aggression=aggression)
     
     print("\n✨ Thanks for playing! ✨\n")
