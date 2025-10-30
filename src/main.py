@@ -174,6 +174,7 @@ def play_game(game_state, rules_engine, max_full_turns=10, verbose=True, use_llm
         game_state=game_state, 
         rules_engine=rules_engine, 
         verbose=verbose, 
+        game_logger=game_logger,
         llm_logger=llm_logger,
         heuristic_logger=heuristic_logger,
         use_llm=use_llm,

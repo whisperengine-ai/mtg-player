@@ -39,6 +39,7 @@ class MTGAgent:
         rules_engine: RulesEngine,
         llm_client: Any = None,
         verbose: bool = False,
+        game_logger: Any = None,
         llm_logger: Any = None,
         heuristic_logger: Any = None,
         use_llm: bool = True,
@@ -62,6 +63,7 @@ class MTGAgent:
         self.game_state = game_state
         self.rules_engine = rules_engine
         self.verbose = verbose
+        self.game_logger = game_logger
         self.llm_logger = llm_logger
         self.heuristic_logger = heuristic_logger
         self.use_llm = use_llm
@@ -204,6 +206,11 @@ class MTGAgent:
         execute_action = ExecuteActionTool()
         execute_action.game_state = self.game_state
         execute_action.rules_engine = self.rules_engine
+        # Optional: log game actions to game log when available
+        try:
+            execute_action.game_logger = self.game_logger
+        except Exception:
+            pass
         
         analyze_threats = AnalyzeThreatsTool()
         analyze_threats.game_state = self.game_state

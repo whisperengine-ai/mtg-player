@@ -183,6 +183,8 @@ class ExecuteActionTool(Tool):
     """Execute a game action."""
     game_state: Optional[Any] = None
     rules_engine: Optional[Any] = None
+    # Optional: when provided, logs high-level actions to the game log
+    game_logger: Optional[Any] = None
     
     def __init__(self, **data):
         super().__init__(
@@ -215,19 +217,28 @@ class ExecuteActionTool(Tool):
                 # If all players passed and stack is empty, advance phase
                 if should_advance and self.rules_engine.stack.is_empty():
                     self.rules_engine.advance_phase()
+                    msg = "All players passed, advanced to next phase"
+                    if self.game_logger:
+                        self.game_logger.log_action(active_player.name, "pass", msg)
                     return {
                         "success": True,
-                        "message": "All players passed, advanced to next phase"
+                        "message": msg
                     }
                 elif not self.rules_engine.stack.is_empty():
+                    msg = "Passed priority, stack resolving or awaiting other players"
+                    if self.game_logger:
+                        self.game_logger.log_action(active_player.name, "pass", msg)
                     return {
                         "success": True,
-                        "message": "Passed priority, stack resolving or awaiting other players"
+                        "message": msg
                     }
                 else:
+                    msg = "Passed priority"
+                    if self.game_logger:
+                        self.game_logger.log_action(active_player.name, "pass", msg)
                     return {
                         "success": True,
-                        "message": "Passed priority"
+                        "message": msg
                     }
             
             elif action_type == "play_land":
@@ -237,6 +248,8 @@ class ExecuteActionTool(Tool):
                     return {"error": "Card not found in hand"}
                 
                 success = self.rules_engine.play_land(active_player, card)
+                if success and self.game_logger:
+                    self.game_logger.log_action(active_player.name, "play_land", f"Played {card.card.name}")
                 return {
                     "success": success,
                     "message": f"Played {card.card.name}" if success else "Could not play land"
@@ -249,6 +262,8 @@ class ExecuteActionTool(Tool):
                     return {"error": "Land not found on battlefield"}
                 
                 success = self.rules_engine.tap_land_for_mana(active_player, land)
+                if success and self.game_logger:
+                    self.game_logger.log_action(active_player.name, "tap_land", f"Tapped {land.card.name} for mana")
                 return {
                     "success": success,
                     "message": f"Tapped {land.card.name} for mana" if success else "Could not tap land"
@@ -261,6 +276,8 @@ class ExecuteActionTool(Tool):
                     return {"error": "Card not found in hand"}
                 
                 success = self.rules_engine.cast_spell(active_player, card)
+                if success and self.game_logger:
+                    self.game_logger.log_action(active_player.name, "cast_spell", f"Cast {card.card.name} (cost: {card.card.mana_cost})")
                 return {
                     "success": success,
                     "message": f"Cast {card.card.name}" if success else "Could not cast spell"
@@ -278,6 +295,10 @@ class ExecuteActionTool(Tool):
                     return {"error": "Creature not found"}
                 
                 success = self.rules_engine.declare_attackers(active_player, [(creature, target_id)])
+                if success and self.game_logger:
+                    target_player = self.game_state.get_player(target_id)
+                    target_name = target_player.name if target_player else target_id
+                    self.game_logger.log_action(active_player.name, "declare_attacker", f"{creature.card.name} attacks {target_name}")
                 return {
                     "success": success,
                     "message": f"{creature.card.name} attacks" if success else "Could not declare attacker"
@@ -295,6 +316,15 @@ class ExecuteActionTool(Tool):
                     return {"error": "Blocker not found"}
                 
                 success = self.rules_engine.declare_blockers(active_player, [(blocker, attacker_id)])
+                if success and self.game_logger:
+                    # Find attacker name for context
+                    attacker = None
+                    for opponent in self.game_state.get_opponents(active_player.id):
+                        attacker = next((c for c in opponent.creatures_in_play() if c.instance_id == attacker_id), None)
+                        if attacker:
+                            break
+                    attacker_name = attacker.card.name if attacker else str(attacker_id)
+                    self.game_logger.log_action(active_player.name, "declare_blocker", f"{blocker.card.name} blocks {attacker_name}")
                 return {
                     "success": success,
                     "message": f"{blocker.card.name} blocks" if success else "Could not declare blocker"
