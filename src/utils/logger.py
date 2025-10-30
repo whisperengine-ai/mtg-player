@@ -133,11 +133,18 @@ class GameLogger:
 class LLMLogger:
     """Logger for LLM interactions and prompts."""
     
-    def __init__(self, log_dir: Path, game_id: str):
-        """Initialize LLM logger."""
+    def __init__(self, log_dir: Path, game_id: str, console_summary: bool = False):
+        """Initialize LLM logger.
+        
+        Args:
+            log_dir: Directory for log files
+            game_id: Unique game identifier
+            console_summary: If True, print a one-line summary per LLM call to console
+        """
         self.log_dir = log_dir
         self.game_id = game_id
         self.log_file = log_dir / f"llm_{game_id}.log"
+        self.console_summary = console_summary
         
         # Ensure log directory exists
         self.log_dir.mkdir(parents=True, exist_ok=True)
@@ -160,6 +167,10 @@ class LLMLogger:
         
         # Track call count
         self.call_count = 0
+        # Track last call data for console summary
+        self._last_call_model: Optional[str] = None
+        self._last_call_tool_count: int = 0
+
     
     def log_llm_call(
         self,
@@ -172,6 +183,7 @@ class LLMLogger:
     ):
         """Log LLM API call with full prompt."""
         self.call_count += 1
+        self._last_call_model = model
         
         self.logger.info("=" * 80)
         self.logger.info("LLM CALL #%d | %s | Turn %d | %s", self.call_count, player_name, turn, phase)
@@ -223,6 +235,10 @@ class LLMLogger:
         if thinking_content:
             self.logger.info("Thinking: %s", thinking_content)
         
+        # Track tool call count for console summary
+        tool_count = len(tool_calls) if tool_calls else 0
+        self._last_call_tool_count = tool_count
+        
         if tool_calls:
             self.logger.info("Tool Calls: %d", len(tool_calls))
             for tc in tool_calls:
@@ -252,6 +268,11 @@ class LLMLogger:
         
         self.logger.info("Finish Reason: %s", finish_reason)
         self.logger.info("=" * 80)
+        
+        # Print console summary if enabled
+        if self.console_summary:
+            model_short = (self._last_call_model or "unknown").split("/")[-1][:20]
+            print(f"🤖 LLM #{self.call_count}: {model_short} | tools: {tool_count} | {finish_reason}")
     
     def log_tool_execution(self, tool_name: str, args: Dict[str, Any], result: Dict[str, Any]):
         """Log tool execution with full results (no truncation)."""
@@ -380,13 +401,14 @@ class HeuristicLogger:
                 self.logger.info("       - %s", reason)
 
 
-def setup_loggers(game_id: str, log_base_dir: str = "logs") -> tuple[GameLogger, LLMLogger, HeuristicLogger]:
+def setup_loggers(game_id: str, log_base_dir: str = "logs", llm_console_summary: bool = False) -> tuple[GameLogger, LLMLogger, HeuristicLogger]:
     """
     Set up game and LLM loggers for a game session.
     
     Args:
         game_id: Unique game identifier
         log_base_dir: Base directory for logs (default: "logs")
+        llm_console_summary: If True, print one-line console summaries per LLM call
     
     Returns:
         Tuple of (GameLogger, LLMLogger, HeuristicLogger)
@@ -395,7 +417,7 @@ def setup_loggers(game_id: str, log_base_dir: str = "logs") -> tuple[GameLogger,
     log_dir.mkdir(parents=True, exist_ok=True)
     
     game_logger = GameLogger(log_dir, game_id)
-    llm_logger = LLMLogger(log_dir, game_id)
+    llm_logger = LLMLogger(log_dir, game_id, console_summary=llm_console_summary)
     heuristic_logger = HeuristicLogger(log_dir, game_id)
 
     return game_logger, llm_logger, heuristic_logger

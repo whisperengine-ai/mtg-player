@@ -130,7 +130,7 @@ def setup_game(num_players=4, verbose=True, archetypes=None):
     return game_state, rules_engine
 
 
-def play_game(game_state, rules_engine, max_full_turns=10, verbose=True, use_llm=True, aggression="balanced"):
+def play_game(game_state, rules_engine, max_full_turns=10, verbose=True, use_llm=True, aggression="balanced", llm_console_summary=False):
     """Play a game of Commander with simple auto-progression through phases.
 
     We progress the game by ensuring each loop iteration advances at least one
@@ -143,12 +143,14 @@ def play_game(game_state, rules_engine, max_full_turns=10, verbose=True, use_llm
         max_full_turns: Maximum number of full turns before ending game
         verbose: Whether to print game progress
         use_llm: Whether to use LLM for AI decisions (if False, uses rule-based heuristics)
+        aggression: Combat aggression level
+        llm_console_summary: If True, print one-line console summaries per LLM call
     """
 
     # Set up loggers
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     game_id = f"{timestamp}_{game_state.game_id[:8]}"
-    game_logger, llm_logger, heuristic_logger = setup_loggers(game_id)
+    game_logger, llm_logger, heuristic_logger = setup_loggers(game_id, llm_console_summary=llm_console_summary)
     # Attach game logger to rules engine for internal events (draws, life changes)
     if hasattr(rules_engine, "set_game_logger"):
         rules_engine.set_game_logger(game_logger)
@@ -359,6 +361,11 @@ def main():
         turn_summaries = False
     if "--turn-summaries" in sys.argv:
         turn_summaries = True
+
+    # LLM console summary flag (default: disabled)
+    llm_console_summary = False
+    if "--llm-console" in sys.argv:
+        llm_console_summary = True
     
     # Show help if requested
     if "--help" in sys.argv or "-h" in sys.argv:
@@ -377,6 +384,7 @@ Options:
   --seed=N                  Seed Python RNG for reproducible shuffles and decisions
   --no-turn-summaries       Disable end-of-turn summaries in game log
   --turn-summaries          Enable end-of-turn summaries in game log (default)
+  --llm-console             Print one-line console summaries per LLM call
   --help, -h                Show this help message
 
 Examples:
@@ -387,6 +395,7 @@ Examples:
   python run.py --players=2 --verbose     # 2-player game with output
   python run.py --no-llm --verbose        # Heuristic mode (no API costs)
   python run.py --max-turns=5 --verbose   # Short 5-turn game
+  python run.py --llm-console --verbose   # Show LLM call summaries in console
 
 For more information, see README.md and QUICKSTART.md
         """)
@@ -397,7 +406,15 @@ For more information, see README.md and QUICKSTART.md
     # Configure end-of-turn summaries
     if hasattr(rules_engine, "set_turn_summary_enabled"):
         rules_engine.set_turn_summary_enabled(turn_summaries)
-    play_game(game_state, rules_engine, max_full_turns=max_turns, verbose=verbose, use_llm=not no_llm, aggression=aggression)
+    play_game(
+        game_state,
+        rules_engine,
+        max_full_turns=max_turns,
+        verbose=verbose,
+        use_llm=not no_llm,
+        aggression=aggression,
+        llm_console_summary=llm_console_summary
+    )
     
     print("\n✨ Thanks for playing! ✨\n")
 

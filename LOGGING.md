@@ -157,13 +157,37 @@ python run.py --verbose
 - Game end conditions
 - Log file locations
 
-**Console does NOT show**:
+**Console does NOT show** (by default):
 - Detailed LLM prompts and responses
 - Tool execution details
 - Token usage statistics
 - Extended reasoning content
 
 This keeps the console output clean and readable while capturing all details in log files.
+
+### Optional: LLM Console Summaries
+
+Use the `--llm-console` flag to print a one-line summary to console after each LLM call:
+
+```bash
+python run.py --verbose --llm-console
+```
+
+**Example console output with `--llm-console`**:
+```
+🤖 LLM #1: gpt-4o-mini | tools: 5 | tool_calls
+🤖 LLM #2: gpt-4o-mini | tools: 1 | stop
+```
+
+This is useful for:
+- Monitoring LLM activity during live runs
+- Quickly seeing which models are being used
+- Tracking tool call patterns without opening log files
+- Debugging without verbose file inspection
+
+The summary format is: `🤖 LLM #{call_number}: {model_name} | tools: {tool_count} | {finish_reason}`
+
+All detailed information (prompts, full responses, reasoning, token counts) remains in the LLM log file.
 
 ## Logging Architecture
 
