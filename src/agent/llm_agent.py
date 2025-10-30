@@ -38,7 +38,8 @@ class MTGAgent:
         rules_engine: RulesEngine,
         llm_client: Any = None,
         verbose: bool = False,
-        llm_logger: Any = None
+        llm_logger: Any = None,
+        use_llm: bool = True
     ):
         """
         Initialize the agent.
@@ -49,14 +50,16 @@ class MTGAgent:
             llm_client: LLM client (OpenAI, Anthropic, etc.) - if None, will auto-initialize
             verbose: Whether to print reasoning
             llm_logger: LLM logger for recording prompts/responses
+            use_llm: Whether to use LLM for decisions (if False, uses rule-based heuristics)
         """
         self.game_state = game_state
         self.rules_engine = rules_engine
         self.verbose = verbose
         self.llm_logger = llm_logger
+        self.use_llm = use_llm
         
-        # Initialize LLM client if not provided
-        if llm_client is None:
+        # Initialize LLM client if not provided (and if we're using LLM)
+        if llm_client is None and use_llm:
             self.llm_client = self._initialize_llm_client()
         else:
             self.llm_client = llm_client
@@ -308,8 +311,10 @@ class MTGAgent:
         Make a decision using LLM with tool calling.
         Returns the action to take, or None if passing/no action.
         """
-        if self.llm_client is None:
-            # Fall back to simple heuristics if no LLM available
+        # If LLM is disabled, use heuristics
+        if not self.use_llm or self.llm_client is None:
+            if self.verbose:
+                print("🎲 Using rule-based AI (no LLM)")
             return self._make_simple_decision()
         
         # Reset conversation for this decision (keep only system prompt)
@@ -542,113 +547,326 @@ class MTGAgent:
     
     def _make_simple_decision(self) -> Optional[Dict[str, Any]]:
         """
-        Simple rule-based decision making for PoC.
-        Replace this with LLM calls in full implementation.
+        Enhanced rule-based decision making that demonstrates agentic flow.
+        Uses the same tools as LLM would use, showing the architecture works.
         """
-        # Get available actions
+        if self.verbose:
+            print("\n🔍 Analyzing game state...")
+        
+        # Step 1: Get game state (like LLM would)
+        game_state_tool = self.tools["get_game_state"]
+        state_result = game_state_tool.execute()
+        
+        if not state_result.get("success"):
+            return {"type": "pass", "reasoning": "Could not read game state"}
+        
+        # Step 2: Check stack state (instant-speed awareness)
+        stack_tool = self.tools["get_stack_state"]
+        stack_result = stack_tool.execute()
+        stack_empty = stack_result.get("is_empty", True)
+        
+        # Step 3: Analyze threats (strategic awareness)
+        threats_tool = self.tools["analyze_threats"]
+        threats_result = threats_tool.execute()
+        threats = threats_result.get("threats", [])
+        
+        if self.verbose and threats:
+            print(f"⚠️  Identified {len(threats)} threats")
+        
+        # Step 4: Get legal actions
         legal_actions_tool = self.tools["get_legal_actions"]
-        result = legal_actions_tool.execute()
+        actions_result = legal_actions_tool.execute()
         
-        if not result.get("success"):
-            return None
+        if not actions_result.get("success"):
+            return {"type": "pass", "reasoning": "No legal actions available"}
         
-        actions = result.get("actions", [])
+        actions = actions_result.get("actions", [])
         if not actions:
-            return None
+            return {"type": "pass", "reasoning": "No actions available"}
         
         active_player = self.game_state.get_active_player()
         step = self.game_state.current_step.value
+        phase = self.game_state.current_phase.value
         
-        # Main phase logic
+        if self.verbose:
+            print(f"📋 Found {len(actions)} legal actions in {phase}/{step}")
+        
+        # Step 5: Make intelligent decisions based on phase
+        decision = None
+        
         if step == "main":
-            # 1. Play a land if possible
-            land_actions = [a for a in actions if a["type"] == "play_land"]
-            if land_actions and not active_player.has_played_land_this_turn:
-                action = land_actions[0]
-                self._execute_action(action)
-                return {
-                    "type": action["type"],
-                    "reasoning": "Playing a land to increase mana availability"
-                }
+            decision = self._decide_main_phase(actions, active_player, threats)
+        elif step == "declare_attackers":
+            decision = self._decide_attackers(actions, active_player, threats)
+        elif step == "declare_blockers":
+            decision = self._decide_blockers(actions, active_player, threats)
+        elif phase == "beginning" or phase == "ending":
+            # Check for instant-speed responses
+            can_respond_tool = self.tools["can_respond"]
+            respond_result = can_respond_tool.execute()
             
-            # 2. Cast a cheap spell
-            spell_actions = [a for a in actions if a["type"] == "cast_spell"]
-            if spell_actions:
-                # Sort by cost, cast cheapest
-                spell_actions.sort(key=lambda x: x.get("cost", "{99}"))
-                action = spell_actions[0]
+            if respond_result.get("can_respond") and respond_result.get("available_instants"):
+                decision = self._decide_instant_response(actions, respond_result)
+            else:
+                # Just pass through non-interactive phases
+                pass_action = next((a for a in actions if a["type"] == "pass"), None)
+                if pass_action:
+                    self._execute_action(pass_action)
+                    decision = {"type": "pass", "reasoning": f"Passing through {phase} phase"}
+        else:
+            # Default: pass
+            pass_action = next((a for a in actions if a["type"] == "pass"), None)
+            if pass_action:
+                self._execute_action(pass_action)
+                decision = {"type": "pass", "reasoning": f"No actions in {phase}/{step}"}
+        
+        return decision
+    
+    def _decide_main_phase(self, actions: list, active_player, threats: list) -> Dict[str, Any]:
+        """Decide what to do during main phase - demonstrates strategic thinking."""
+        # Priority 1: Play a land if we haven't yet
+        land_actions = [a for a in actions if a["type"] == "play_land"]
+        if land_actions and not active_player.has_played_land_this_turn:
+            action = land_actions[0]
+            self._execute_action(action)
+            if self.verbose:
+                print(f"🌲 Playing land: {action.get('card_name', 'Land')}")
+            return {
+                "type": action["type"],
+                "card": action.get("card_name"),
+                "reasoning": "Ramping: Playing land for mana development"
+            }
+        
+        # Priority 2: Cast removal if there's a threat
+        removal_keywords = ["destroy", "exile", "counter", "bounce", "removal"]
+        spell_actions = [a for a in actions if a["type"] == "cast_spell"]
+        
+        if threats and spell_actions:
+            # Look for removal spells
+            removal_spells = [
+                a for a in spell_actions 
+                if any(keyword in a.get("card_name", "").lower() for keyword in removal_keywords)
+                or any(keyword in a.get("oracle_text", "").lower() for keyword in removal_keywords)
+            ]
+            
+            if removal_spells:
+                # Cast cheapest removal
+                removal_spells.sort(key=lambda x: self._mana_cost_value(x.get("cost", "")))
+                action = removal_spells[0]
                 
-                # First tap lands for mana
-                available_mana = active_player.available_mana().total()
-                required = len([c for c in action.get("cost", "") if c.isdigit()])
-                
-                if available_mana >= required:
+                if self._can_afford(action, active_player):
                     self._execute_action(action)
+                    if self.verbose:
+                        print(f"🎯 Casting removal: {action.get('card_name')}")
                     return {
                         "type": action["type"],
-                        "reasoning": f"Casting {action.get('card_name')} to develop board"
+                        "card": action.get("card_name"),
+                        "reasoning": f"Answering threat with {action.get('card_name')}"
                     }
-            
-            # 3. Pass if nothing else to do
-            pass_action = [a for a in actions if a["type"] == "pass"][0]
-            self._execute_action(pass_action)
-            return {
-                "type": "pass",
-                "reasoning": "No profitable actions, passing priority"
-            }
         
-        # Combat: Declare attackers
-        elif step == "declare_attackers":
-            attack_actions = [a for a in actions if a["type"] == "declare_attacker"]
-            
-            if attack_actions:
-                # Simple: attack with all creatures
-                for action in attack_actions:
-                    self._execute_action(action)
-                
-                if attack_actions:
-                    return {
-                        "type": "declare_attacker",
-                        "reasoning": f"Attacking with {len(attack_actions)} creatures to apply pressure"
-                    }
-            
-            # Pass if no attackers
-            pass_action = [a for a in actions if a["type"] == "pass"][0]
-            self._execute_action(pass_action)
-            return {
-                "type": "pass",
-                "reasoning": "No creatures able to attack"
-            }
+        # Priority 3: Cast creatures (board development)
+        creature_actions = [
+            a for a in spell_actions 
+            if "creature" in a.get("card_types", []) or "Creature" in str(a.get("card_types", []))
+        ]
         
-        # Combat: Declare blockers
-        elif step == "declare_blockers":
-            block_actions = [a for a in actions if a["type"] == "declare_blocker"]
-            
-            if block_actions:
-                # Simple: block with first available blocker
-                action = block_actions[0]
+        if creature_actions:
+            # Cast cheapest creature we can afford
+            affordable = [a for a in creature_actions if self._can_afford(a, active_player)]
+            if affordable:
+                affordable.sort(key=lambda x: self._mana_cost_value(x.get("cost", "")))
+                action = affordable[0]
                 self._execute_action(action)
+                if self.verbose:
+                    print(f"🦁 Casting creature: {action.get('card_name')}")
                 return {
-                    "type": "declare_blocker",
-                    "reasoning": f"Blocking to prevent damage"
+                    "type": action["type"],
+                    "card": action.get("card_name"),
+                    "reasoning": f"Building board with {action.get('card_name')}"
                 }
-            
-            # Pass if no blocks needed
-            pass_action = [a for a in actions if a["type"] == "pass"][0]
+        
+        # Priority 4: Cast other spells (ramp, draw, etc.)
+        if spell_actions:
+            affordable = [a for a in spell_actions if self._can_afford(a, active_player)]
+            if affordable:
+                # Prefer cheaper spells
+                affordable.sort(key=lambda x: self._mana_cost_value(x.get("cost", "")))
+                action = affordable[0]
+                self._execute_action(action)
+                if self.verbose:
+                    print(f"✨ Casting spell: {action.get('card_name')}")
+                return {
+                    "type": action["type"],
+                    "card": action.get("card_name"),
+                    "reasoning": f"Casting {action.get('card_name')} for value"
+                }
+        
+        # Nothing else to do - pass
+        pass_action = next((a for a in actions if a["type"] == "pass"), None)
+        if pass_action:
             self._execute_action(pass_action)
+            if self.verbose:
+                print("⏭️  Passing priority - no profitable plays")
             return {
                 "type": "pass",
-                "reasoning": "No blocks needed or no blockers available"
+                "reasoning": "No profitable actions available, passing priority"
             }
         
-        # Default: pass
+        return {"type": "pass", "reasoning": "End of main phase"}
+    
+    def _decide_attackers(self, actions: list, active_player, threats: list) -> Dict[str, Any]:
+        """Decide which creatures to attack with - demonstrates combat logic."""
+        attack_actions = [a for a in actions if a["type"] == "declare_attacker"]
+        
+        if not attack_actions:
+            pass_action = next((a for a in actions if a["type"] == "pass"), None)
+            if pass_action:
+                self._execute_action(pass_action)
+            return {"type": "pass", "reasoning": "No creatures available to attack"}
+        
+        # Simple but effective strategy: attack with creatures that have good power
+        # and avoid attacking if defender has much bigger blockers
+        attackers_declared = []
+        
+        for action in attack_actions:
+            attacker_power = action.get("power", 0)
+            
+            # Attack if creature has decent power (2+) or if we're behind and need to apply pressure
+            should_attack = attacker_power >= 2 or active_player.life < 30
+            
+            if should_attack:
+                self._execute_action(action)
+                attackers_declared.append(action.get("card_name", "creature"))
+        
+        if attackers_declared:
+            if self.verbose:
+                print(f"⚔️  Attacking with {len(attackers_declared)} creatures")
+            return {
+                "type": "declare_attacker",
+                "count": len(attackers_declared),
+                "reasoning": f"Attacking with {len(attackers_declared)} creatures to apply pressure"
+            }
         else:
-            pass_action = [a for a in actions if a["type"] == "pass"][0]
-            self._execute_action(pass_action)
+            # Decided not to attack - pass
+            pass_action = next((a for a in actions if a["type"] == "pass"), None)
+            if pass_action:
+                self._execute_action(pass_action)
+            if self.verbose:
+                print("🛡️  Holding back - too risky to attack")
             return {
                 "type": "pass",
-                "reasoning": "Passing through non-interactive phase"
+                "reasoning": "Holding creatures back - attack too risky"
             }
+    
+    def _decide_blockers(self, actions: list, active_player, threats: list) -> Dict[str, Any]:
+        """Decide how to block - demonstrates defensive logic."""
+        block_actions = [a for a in actions if a["type"] == "declare_blocker"]
+        
+        if not block_actions:
+            pass_action = next((a for a in actions if a["type"] == "pass"), None)
+            if pass_action:
+                self._execute_action(pass_action)
+            return {"type": "pass", "reasoning": "No blockers available"}
+        
+        # Simple blocking strategy: block the biggest attacker we can handle
+        # Sort by attacker power (highest first)
+        block_actions.sort(key=lambda x: x.get("attacker_power", 0), reverse=True)
+        
+        blockers_declared = []
+        for action in block_actions:
+            attacker_power = action.get("attacker_power", 0)
+            blocker_toughness = action.get("blocker_toughness", 0)
+            
+            # Block if we can survive (our toughness >= their power)
+            # or if we're desperate (low life)
+            should_block = blocker_toughness >= attacker_power or active_player.life <= 15
+            
+            if should_block:
+                self._execute_action(action)
+                blockers_declared.append(action.get("blocker_name", "creature"))
+                # Only block one attacker per blocker in this simple strategy
+                break
+        
+        if blockers_declared:
+            if self.verbose:
+                print(f"🛡️  Blocking with {len(blockers_declared)} creatures")
+            return {
+                "type": "declare_blocker",
+                "count": len(blockers_declared),
+                "reasoning": f"Blocking {len(blockers_declared)} attacker(s) to prevent damage"
+            }
+        else:
+            # No good blocks - take the damage
+            pass_action = next((a for a in actions if a["type"] == "pass"), None)
+            if pass_action:
+                self._execute_action(pass_action)
+            if self.verbose:
+                print("💔 No favorable blocks - taking damage")
+            return {
+                "type": "pass",
+                "reasoning": "No favorable blocks available - accepting damage"
+            }
+    
+    def _decide_instant_response(self, actions: list, respond_result: dict) -> Dict[str, Any]:
+        """Decide whether to cast instant-speed spells - demonstrates instant interaction."""
+        instants = respond_result.get("available_instants", [])
+        
+        if not instants:
+            pass_action = next((a for a in actions if a["type"] == "pass"), None)
+            if pass_action:
+                self._execute_action(pass_action)
+            return {"type": "pass", "reasoning": "No instant-speed responses available"}
+        
+        # Simple heuristic: cast instant if it's a counterspell or removal
+        priority_keywords = ["counter", "destroy", "exile", "return"]
+        
+        for instant in instants:
+            card_name = instant.get("name", "").lower()
+            oracle_text = instant.get("oracle_text", "").lower()
+            
+            # Check if it's a high-priority instant
+            if any(keyword in card_name or keyword in oracle_text for keyword in priority_keywords):
+                # Try to cast it
+                cast_actions = [a for a in actions if a["type"] == "cast_spell" and a.get("card_name") == instant.get("name")]
+                if cast_actions:
+                    action = cast_actions[0]
+                    self._execute_action(action)
+                    if self.verbose:
+                        print(f"⚡ Responding with instant: {instant.get('name')}")
+                    return {
+                        "type": "cast_spell",
+                        "card": instant.get("name"),
+                        "reasoning": f"Responding with instant-speed {instant.get('name')}"
+                    }
+        
+        # No good instants to cast - pass
+        pass_action = next((a for a in actions if a["type"] == "pass"), None)
+        if pass_action:
+            self._execute_action(pass_action)
+        return {"type": "pass", "reasoning": "Holding instant-speed spells"}
+    
+    def _can_afford(self, action: Dict[str, Any], player) -> bool:
+        """Check if player can afford to cast this spell."""
+        cost_str = action.get("cost", "")
+        if not cost_str:
+            return True
+        
+        # Simple heuristic: count generic mana cost
+        generic_cost = sum(int(c) for c in cost_str if c.isdigit())
+        colored_cost = sum(1 for c in cost_str if c.isalpha())
+        total_cost = generic_cost + colored_cost
+        
+        available = player.available_mana().total()
+        return available >= total_cost
+    
+    def _mana_cost_value(self, cost_str: str) -> int:
+        """Convert mana cost string to numeric value for comparison."""
+        if not cost_str:
+            return 0
+        
+        generic = sum(int(c) for c in cost_str if c.isdigit())
+        colored = sum(1 for c in cost_str if c.isalpha())
+        return generic + colored
     
     def _execute_action(self, action: Dict[str, Any]) -> Dict[str, Any]:
         """Execute an action using the tool."""

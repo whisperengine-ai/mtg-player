@@ -48,11 +48,20 @@ python run.py
 # 2-player game with output
 python run.py --players=2 --verbose
 
+# Heuristic mode (no LLM calls - free, fast testing)
+python run.py --no-llm --verbose
+
 # Alternative entry (without run.py)
 PYTHONPATH=./src python src/main.py --verbose
 ```
 
 That's it! The AI will play a game using LLM reasoning.
+
+**💡 Tip**: Use `--no-llm` flag to test without making API calls. This runs an **enhanced rule-based AI** that:
+- Uses the same tool-calling architecture as the LLM version
+- Analyzes game state, evaluates threats, makes strategic decisions
+- Demonstrates the agentic design pattern without LLM dependency
+- Perfect for rapid testing, demos, and understanding the architecture
 
 ## What You'll See
 

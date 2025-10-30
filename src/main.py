@@ -130,12 +130,19 @@ def setup_game(num_players=4, verbose=True, archetypes=None):
     return game_state, rules_engine
 
 
-def play_game(game_state, rules_engine, max_full_turns=10, verbose=True):
+def play_game(game_state, rules_engine, max_full_turns=10, verbose=True, use_llm=True):
     """Play a game of Commander with simple auto-progression through phases.
 
     We progress the game by ensuring each loop iteration advances at least one
     phase/step. This avoids getting stuck in the same step when the agent takes
     a non-passing action (e.g., plays a land).
+    
+    Args:
+        game_state: The game state
+        rules_engine: The rules engine
+        max_full_turns: Maximum number of full turns before ending game
+        verbose: Whether to print game progress
+        use_llm: Whether to use LLM for AI decisions (if False, uses rule-based heuristics)
     """
 
     # Set up loggers
@@ -156,13 +163,20 @@ def play_game(game_state, rules_engine, max_full_turns=10, verbose=True):
     if verbose:
         print(f"\n{'='*60}")
         print("🎲 GAME START")
+        if not use_llm:
+            print("🎲 Running in HEURISTIC MODE (no LLM calls)")
         print(f"📝 Logs saved to: logs/game_{game_id}.log and logs/llm_{game_id}.log")
         print(f"{'='*60}\n")
         print(game_state)
 
     # Create agents for each player with logger
-    agents = {p.id: MTGAgent(game_state=game_state, rules_engine=rules_engine, verbose=verbose, llm_logger=llm_logger)
-              for p in game_state.players}
+    agents = {p.id: MTGAgent(
+        game_state=game_state, 
+        rules_engine=rules_engine, 
+        verbose=verbose, 
+        llm_logger=llm_logger,
+        use_llm=use_llm
+    ) for p in game_state.players}
 
     # Drive the game by steps, but cap by full-turns to avoid infinite loops
     starting_turn = game_state.turn_number
@@ -275,6 +289,7 @@ def main():
     
     # Parse arguments
     verbose = "--verbose" in sys.argv or "-v" in sys.argv
+    no_llm = "--no-llm" in sys.argv or "--heuristic" in sys.argv
     
     # Support custom player count
     num_players = 4  # Default to 4-player Commander
@@ -288,7 +303,7 @@ def main():
     
     # Set up and play game
     game_state, rules_engine = setup_game(num_players=num_players, verbose=verbose)
-    play_game(game_state, rules_engine, max_full_turns=10, verbose=verbose)
+    play_game(game_state, rules_engine, max_full_turns=10, verbose=verbose, use_llm=not no_llm)
     
     print("\n✨ Thanks for playing! ✨\n")
 

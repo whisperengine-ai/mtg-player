@@ -79,9 +79,20 @@ python run.py --verbose            # With turn-by-turn output to console
 python run.py --players=2          # 2-player game
 python run.py --players=2 --verbose  # 2-player with console output
 
+# Heuristic mode (no LLM calls - for testing without API costs)
+python run.py --no-llm --verbose   # Use rule-based AI instead of LLM
+python run.py --heuristic          # Alternative flag name
+
 # Alternative entry (without run.py)
 PYTHONPATH=./src python src/main.py --verbose
 ```
+
+**Heuristic Mode**: Use `--no-llm` or `--heuristic` to run games without making LLM API calls. This uses an **enhanced rule-based AI** that demonstrates the agentic architecture:
+- ✅ Uses the same tool-calling pattern as the LLM
+- ✅ Queries game state, analyzes threats, checks stack
+- ✅ Makes strategic decisions (ramp, removal, combat)
+- ✅ Shows the architecture works without LLM dependency
+- 💰 **Perfect for**: Testing engine, rapid iteration, demos, no API costs
 
 ### Logging
 
