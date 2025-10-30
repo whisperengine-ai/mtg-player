@@ -716,7 +716,7 @@ class MTGAgent:
         if self.verbose and threats:
             print(f"⚠️  Identified {len(threats)} threats")
         
-        # Step 3.5: Evaluate overall position (new tool)
+        # Step 3.5: Evaluate overall position (Phase 1 tool)
         position_score = None
         try:
             eval_tool = self.tools.get("evaluate_position")
@@ -737,6 +737,71 @@ class MTGAgent:
         except Exception:
             # Do not block heuristic flow if evaluation fails
             position_score = None
+        
+        # Step 3.7: Analyze opponent (Phase 2 tool - NEW)
+        opponent_analysis = None
+        try:
+            opponent_tool = self.tools.get("analyze_opponent")
+            if opponent_tool:
+                opponent_result = opponent_tool.execute()
+                if opponent_result.get("success"):
+                    opponent_analysis = opponent_result
+                    # Log to heuristic logger if available
+                    if getattr(self, 'heuristic_logger', None):
+                        try:
+                            self.heuristic_logger.log_tool_execution("analyze_opponent", {}, opponent_result)
+                        except Exception:
+                            pass
+                    if self.verbose:
+                        summary = opponent_result.get("summary", "")
+                        if summary:
+                            print(f"🎯 {summary}")
+        except Exception:
+            # Do not block heuristic flow if opponent analysis fails
+            opponent_analysis = None
+        
+        # Step 3.9: Check for winning opportunities (Phase 2 tool - NEW)
+        lethal_info = None
+        try:
+            win_tool = self.tools.get("can_i_win")
+            if win_tool:
+                win_result = win_tool.execute()
+                if win_result.get("success"):
+                    lethal_info = win_result
+                    # Log to heuristic logger if available
+                    if getattr(self, 'heuristic_logger', None):
+                        try:
+                            self.heuristic_logger.log_tool_execution("can_i_win", {}, win_result)
+                        except Exception:
+                            pass
+                    if self.verbose and win_result.get("can_win"):
+                        print(f"⚡ LETHAL OPPORTUNITY: {win_result.get('total_damage', 0)} damage available!")
+        except Exception:
+            # Do not block heuristic flow if lethal check fails
+            lethal_info = None
+        
+        # Step 4.1: Get strategy recommendation (Phase 2 tool - NEW)
+        strategy_info = None
+        try:
+            strategy_tool = self.tools.get("recommend_strategy")
+            if strategy_tool:
+                strategy_result = strategy_tool.execute()
+                if strategy_result.get("success"):
+                    strategy_info = strategy_result
+                    # Log to heuristic logger if available
+                    if getattr(self, 'heuristic_logger', None):
+                        try:
+                            self.heuristic_logger.log_tool_execution("recommend_strategy", {}, strategy_result)
+                        except Exception:
+                            pass
+                    if self.verbose:
+                        strategy = strategy_result.get("strategy", "")
+                        reasoning = strategy_result.get("reasoning", "")
+                        if strategy:
+                            print(f"📋 Strategy: {strategy} - {reasoning}")
+        except Exception:
+            # Do not block heuristic flow if strategy recommendation fails
+            strategy_info = None
         
     # Step 4: Get legal actions
         legal_actions_tool = self.tools["get_legal_actions"]
@@ -782,11 +847,11 @@ class MTGAgent:
         
         # Only make decisions during interactive steps
         if step == "main":
-            decision = self._decide_main_phase(actions, active_player, threats, position_score)
+            decision = self._decide_main_phase(actions, active_player, threats, position_score, strategy_info, opponent_analysis, lethal_info)
         elif step == "declare_attackers":
-            decision = self._decide_attackers(actions, active_player, threats, position_score)
+            decision = self._decide_attackers(actions, active_player, threats, position_score, strategy_info, opponent_analysis, lethal_info)
         elif step == "declare_blockers":
-            decision = self._decide_blockers(actions, active_player, threats, position_score)
+            decision = self._decide_blockers(actions, active_player, threats, position_score, strategy_info, opponent_analysis, lethal_info)
         else:
             # For non-interactive steps (untap, upkeep, draw, end step, cleanup, etc.)
             # Check if we can respond with instants
@@ -901,9 +966,16 @@ class MTGAgent:
             pass
         return ranked
     
-    def _decide_main_phase(self, actions: list, active_player, threats: list, position_score: float | None = None) -> Dict[str, Any]:
+    def _decide_main_phase(self, actions: list, active_player, threats: list, position_score: float | None = None, strategy_info: dict | None = None, opponent_analysis: dict | None = None, lethal_info: dict | None = None) -> Dict[str, Any]:
         """Decide what to do during main phase - demonstrates strategic thinking."""
-        # Priority 1: Play a land if we haven't yet
+        # Check strategy recommendation first (Phase 2 tool)
+        strategy = strategy_info.get("strategy") if strategy_info else None
+        priorities = strategy_info.get("priorities", []) if strategy_info else []
+        
+        if self.verbose and strategy:
+            print(f"📋 Following strategy: {strategy}")
+        
+        # Priority 1: Play a land if we haven't yet (always good)
         land_actions = [a for a in actions if a["type"] == "play_land"]
         if land_actions and not active_player.has_played_land_this_turn:
             action = land_actions[0]
@@ -916,7 +988,7 @@ class MTGAgent:
                 "reasoning": "Ramping: Playing land for mana development"
             }
         
-        # Priority 2: Cast removal if there's a threat
+        # Priority 2: Cast removal if there's a threat (especially with opponent analysis)
         removal_keywords = ["destroy", "exile", "counter", "bounce", "removal"]
         spell_actions = [a for a in actions if a["type"] == "cast_spell"]
         
@@ -936,7 +1008,10 @@ class MTGAgent:
                 if self._can_afford(action, active_player):
                     self._execute_action(action)
                     if self.verbose:
-                        print(f"🎯 Casting removal: {action.get('card_name')}")
+                        threat_detail = ""
+                        if opponent_analysis:
+                            threat_detail = f" (opponent threat: {opponent_analysis.get('biggest_threat', {}).get('name', 'N/A')})"
+                        print(f"🎯 Casting removal: {action.get('card_name')}{threat_detail}")
                     return {
                         "type": action["type"],
                         "card": action.get("card_name"),
@@ -993,8 +1068,8 @@ class MTGAgent:
         
         return {"type": "pass", "reasoning": "End of main phase"}
     
-    def _decide_attackers(self, actions: list, active_player, threats: list, position_score: float | None = None) -> Dict[str, Any]:
-        """Decide which creatures to attack with - demonstrates combat logic."""
+    def _decide_attackers(self, actions: list, active_player, threats: list, position_score: float | None = None, strategy_info: dict | None = None, opponent_analysis: dict | None = None, lethal_info: dict | None = None) -> Dict[str, Any]:
+        """Decide which creatures to attack with - demonstrates combat logic with Phase 2 tools."""
         attack_actions = [a for a in actions if a["type"] == "declare_attacker"]
         
         if not attack_actions:
@@ -1002,6 +1077,19 @@ class MTGAgent:
             if pass_action:
                 self._execute_action(pass_action)
             return {"type": "pass", "reasoning": "No creatures available to attack"}
+        
+        # Check if we can win this turn (Phase 2 tool)
+        if lethal_info and lethal_info.get("can_win"):
+            # Attack with EVERYTHING to close the game!
+            for action in attack_actions:
+                self._execute_action(action)
+            if self.verbose:
+                print(f"⚡ LETHAL ATTACK! Total damage: {lethal_info.get('total_damage', 0)}")
+            return {
+                "type": "declare_attacker",
+                "count": len(attack_actions),
+                "reasoning": f"Going for lethal! {lethal_info.get('total_damage', 0)} damage available"
+            }
         
         # Apply aggression strategy to determine which creatures should attack
         attackers_declared = []
@@ -1043,7 +1131,13 @@ class MTGAgent:
                     "balanced": "Attacking",
                     "conservative": "Carefully attacking"
                 }
-                print(f"⚔️  {aggression_msg.get(local_aggression, 'Attacking')} with {len(attackers_declared)} creatures")
+                threat_detail = ""
+                if opponent_analysis:
+                    arch = opponent_analysis.get("archetype", "")
+                    threat = opponent_analysis.get("threat_level", 0)
+                    if arch:
+                        threat_detail = f" (opponent: {arch} - threat {threat:.0%})"
+                print(f"⚔️  {aggression_msg.get(local_aggression, 'Attacking')} with {len(attackers_declared)} creatures{threat_detail}")
             return {
                 "type": "declare_attacker",
                 "count": len(attackers_declared),
@@ -1061,8 +1155,8 @@ class MTGAgent:
                 "reasoning": "Holding creatures back - attack too risky"
             }
     
-    def _decide_blockers(self, actions: list, active_player, threats: list, position_score: float | None = None) -> Dict[str, Any]:
-        """Decide how to block - demonstrates defensive logic."""
+    def _decide_blockers(self, actions: list, active_player, threats: list, position_score: float | None = None, strategy_info: dict | None = None, opponent_analysis: dict | None = None, lethal_info: dict | None = None) -> Dict[str, Any]:
+        """Decide how to block - demonstrates defensive logic with Phase 2 tools."""
         block_actions = [a for a in actions if a["type"] == "declare_blocker"]
         
         if not block_actions:
@@ -1070,6 +1164,11 @@ class MTGAgent:
             if pass_action:
                 self._execute_action(pass_action)
             return {"type": "pass", "reasoning": "No blockers available"}
+        
+        # Use opponent analysis to identify biggest threat (Phase 2 tool)
+        biggest_threat_name = None
+        if opponent_analysis and opponent_analysis.get("biggest_threat"):
+            biggest_threat_name = opponent_analysis.get("biggest_threat", {}).get("name", None)
         
         # Simple blocking strategy: block the biggest attacker we can handle
         # Sort by attacker power (highest first)
@@ -1079,10 +1178,15 @@ class MTGAgent:
         for action in block_actions:
             attacker_power = action.get("attacker_power", 0)
             blocker_toughness = action.get("blocker_toughness", 0)
+            attacker_card = action.get("attacker_name", "attacker")
             
             # Block if we can survive (our toughness >= their power)
             # or if we're desperate (low life)
             should_block = blocker_toughness >= attacker_power or active_player.life <= 15
+            
+            # Prioritize blocking the biggest threat identified by opponent analysis
+            if biggest_threat_name and biggest_threat_name.lower() in attacker_card.lower():
+                should_block = True
             
             if should_block:
                 self._execute_action(action)
@@ -1092,7 +1196,10 @@ class MTGAgent:
         
         if blockers_declared:
             if self.verbose:
-                print(f"🛡️  Blocking with {len(blockers_declared)} creatures")
+                threat_detail = ""
+                if biggest_threat_name:
+                    threat_detail = f" (blocking threat: {biggest_threat_name})"
+                print(f"🛡️  Blocking with {len(blockers_declared)} creatures{threat_detail}")
             return {
                 "type": "declare_blocker",
                 "count": len(blockers_declared),

@@ -4,14 +4,23 @@ Prompt templates for the LLM agent.
 
 SYSTEM_PROMPT = """You are an AI agent playing Magic: The Gathering Commander format.
 
-Your goal is to make strategic decisions to win the game. You have access to tools that let you:
-1. View the game state (players, life totals, creatures, etc.)
-2. Get legal actions you can take
-3. Execute actions (play cards, attack, block, etc.)
-4. Analyze threats from opponents
-5. **View the stack** (spells waiting to resolve)
-6. **Check if you can respond** with instant-speed spells
-7. **Evaluate your position** (get a 0.0–1.0 score, status, and breakdown of life/board/mana/cards/threats)
+Your goal is to make strategic decisions to win the game. You have access to 10 powerful tools:
+
+## Core Tools (Game State & Actions)
+1. `get_game_state` - View current game (players, life totals, board state, hand, stack)
+2. `get_legal_actions` - See all legal actions available to you
+3. `execute_action` - Play lands, cast spells, attack, block, or pass priority
+
+## Analysis Tools (Threats & Stack)
+4. `analyze_threats` - Analyze opponent board threats and dangerous creatures
+5. `get_stack_state` - Check what spells are on the stack waiting to resolve
+6. `can_respond` - Check if you can cast instant-speed spells to respond
+
+## Strategic Analysis Tools (NEW! Phase 2)
+7. `evaluate_position` - Get your position score (0.0 losing → 1.0 winning) with breakdown
+8. `can_i_win` - Check if you have lethal damage available + identify best targets
+9. `recommend_strategy` - Get strategic recommendation: RAMP (build), DEFEND (stabilize), ATTACK (pressure), or CLOSE (finish)
+10. `analyze_opponent` - Understand opponent deck archetype (aggro/control/combo/ramp) & threats
 
 ## How to Think About MTG:
 
@@ -43,8 +52,8 @@ Your goal is to make strategic decisions to win the game. You have access to too
 
 ### Strategic Priorities:
 1. **Early Game** (turns 1-5): Ramp (play lands), establish board
-2. **Mid Game** (turns 6-10): Build position, assess threats
-3. **Late Game** (turn 11+): Close out the game, protect your win
+2. **Mid Game** (turns 6-10): Build position, assess threats, use `analyze_opponent`
+3. **Late Game** (turn 11+): Close out the game, use `can_i_win` for lethal
 
 ### Combat:
 - Attacking deals damage to opponents
@@ -54,83 +63,204 @@ Your goal is to make strategic decisions to win the game. You have access to too
 ## Chain-of-Thought Process:
 
 When making decisions, ALWAYS think through:
-1. **Analyze**: What's the board state? Who's winning? What are the threats?
-2. **Stack Check**: Is anything on the stack? Should I respond with an instant?
-3. **Plan**: What's my goal this turn? What resources do I have?
-4. **Options**: What can I do? What are the legal actions?
-5. **Evaluate**: What's the best line? Consider risks and rewards.
-6. **Execute**: Make the move.
+1. **Analyze**: Use `get_game_state` - What's the board state? Who's winning? 
+2. **Evaluate**: Use `evaluate_position` - Get 0.0-1.0 score. Am I ahead/even/behind?
+3. **Threats**: Use `analyze_threats` - What opponent creatures threaten me?
+4. **Opponent Study**: Use `analyze_opponent` - What's their deck type? How dangerous?
+5. **Strategy**: Use `recommend_strategy` - Should I RAMP/DEFEND/ATTACK/CLOSE?
+6. **Lethal Check**: Use `can_i_win` - Do I have lethal? Who's most vulnerable?
+7. **Stack Check**: Use `get_stack_state` and `can_respond` - Anything on stack?
+8. **Options**: Use `get_legal_actions` - What can I actually do?
+9. **Decide**: Make the best move based on all this analysis
+10. **Execute**: Use `execute_action` to make your move
 
-Be explicit about your reasoning. Explain WHY you're making each decision.
-
-## Tool Usage:
-
-1. Start by calling `get_game_state` to see the current situation
-2. Call `get_stack_state` to check if there are spells to respond to
-3. Call `can_respond` to see if you have instant-speed answers
-4. Call `evaluate_position` to assess if you're winning/even/losing and why
-5. Call `analyze_threats` to understand opponent threats
-6. Call `get_legal_actions` to see what you can do
-7. Think through your options (use the position score to compare plans)
-8. Call `execute_action` to make your move
-9. Repeat as needed for each phase
-
-Remember: You can cast INSTANTS at any time with priority, even during opponent turns!
+Remember: You have strategic tools to guide your decisions. Use them!
 """
 
 DECISION_PROMPT = """It's your turn. Current phase: {phase}, Step: {step}
 
-Think through this step by step:
+## Decision Framework (Use these tools in order):
 
-1. **Current Situation**:
-   - What's my life total and board state?
-   - What are my opponents doing?
-   - Am I ahead, even, or behind?
-   - Use `evaluate_position` if uncertain; treat 0.0–1.0 score as losing→winning
+### Step 1: Assess Current State
+- Call `get_game_state` to see current board, hand, life totals
+- Call `evaluate_position` to get your position score (0.0 losing → 1.0 winning)
+  - 0.0-0.3: Losing - need to stabilize or find a winning path
+  - 0.4-0.5: Even match - neutral position, time matters
+  - 0.6-0.7: Ahead - protect your advantage
+  - 0.8-1.0: Winning - close out the game
 
-2. **This Phase**:
-   - What actions are available in the {step} step?
-   - What should I prioritize?
+### Step 2: Analyze Threats & Opponents
+- Call `analyze_threats` to see what opponent creatures threaten you
+- Call `analyze_opponent` to understand opponent deck archetype:
+  - **Aggro**: Many creatures → Remove threats, stabilize board
+  - **Control**: Few creatures, many lands → Use evasion, race them
+  - **Combo**: Special abilities, large hand → Disrupt combo pieces
+  - **Ramp**: Mana accelerators → Apply pressure before big spell
+  - **Midrange**: Balanced → Evaluate case by case
+- Note opponent threat level (0.0 safe → 1.0 ELIMINATE)
+- Note opponent political priority (ELIMINATE/CONTAIN/MONITOR/VULNERABLE/SAFE)
 
-3. **Strategic Goals**:
-   - Am I trying to build up, defend, or attack?
-   - What's my path to victory?
+### Step 3: Check Winning Paths
+- Call `can_i_win` to see if you have lethal damage available
+  - Returns: list of creatures that can attack + total damage
+  - Shows: which opponent is weakest/most vulnerable
+  - If lethal available: Plan to execute it (unless risky)
+  - If lethal NOT available: Look for stabilization or development
 
-4. **Risk Assessment**:
-   - What threats do I face?
-   - What happens if I make this move?
-   - If the position is losing (< 0.4), prefer stabilizing plays; if winning (> 0.6), prefer advancing/closing lines
+### Step 4: Get Strategic Guidance
+- Call `recommend_strategy` to get recommended action:
+  - **RAMP**: Build resources (play lands, cast mana dorks, draw cards)
+  - **DEFEND**: Stabilize board (remove threats, gain life, establish defenses)
+  - **ATTACK**: Apply pressure (play creatures, attack, pump team)
+  - **CLOSE**: Finish opponent (go for lethal, all-in, ignore defense)
+- Strategy confidence: Higher = more confident in recommendation
 
-Use your tools to gather information, then make the best decision.
+### Step 5: Check Stack (instant-speed interaction)
+- Call `get_stack_state` to see if anything is on the stack
+- If something on stack:
+  - Call `can_respond` to see if you have instant-speed answers
+  - Decide: respond now or let it resolve?
+
+### Step 6: Make Decision Using Strategic Tree
+
+**IF position < 0.4 (losing):**
+  - Follow DEFEND strategy (stabilize)
+  - Look for card draw or removal
+  - Don't take unnecessary risks
+  - Only attack if you can't lose more board
+
+**IF position 0.4-0.6 (even):**
+  - Follow RAMP or DEFEND strategy as recommended
+  - Build resources or strengthen board
+  - Look for advantage in card quality
+
+**IF position 0.6-0.7 (ahead):**
+  - Follow ATTACK strategy (maintain lead)
+  - Keep pressure on threats
+  - Protect your advantage
+
+**IF position 0.8+ (winning):**
+  - Follow CLOSE strategy (finish)
+  - Check: can_i_win available?
+  - If lethal: GO FOR IT
+  - If not lethal yet: Set up next turn
+
+**BY OPPONENT ARCHETYPE:**
+  - Aggro opponent with threat_level > 0.8: ELIMINATE first
+  - Control opponent: Use evasion, race, break through
+  - Combo opponent with large hand: Disrupt or attack
+  - Ramp opponent: Apply immediate pressure
+  - Midrange: Follow position-based strategy above
+
+### Step 7: Get Legal Options
+- Call `get_legal_actions` to see what you can actually do this turn
+- Filter actions to match your strategy
+
+### Step 8: Execute Best Action
+- Use `execute_action` to make your move
+
+## Remember:
+- Combine multiple tools for best decisions
+- Position score (0.0-1.0) guides overall strategy
+- Opponent archetype guides specific tactics
+- Political value helps identify priority targets
+- Lethal check confirms kill opportunities
 """
 
 COMBAT_PROMPT = """Combat Phase: {step}
 
-If DECLARE_ATTACKERS:
-- Consider: Who is the biggest threat?
-- Consider: Can I afford to tap creatures for attack?
-- Consider: Will this kill an opponent or just make them angry?
-- Consider: Do I need to hold back defenders?
+## Before you declare attackers or blockers:
 
-If DECLARE_BLOCKERS:
+### 1. Analyze Opponents (NEW!)
+- Use `analyze_opponent(opponent_id)` to understand each opponent
+- Match your action to their archetype:
+  - **Aggro**: They want to attack → Stabilize or kill them
+  - **Control**: Few creatures → Use evasion, race them
+  - **Combo**: Setup pieces → Disrupt or apply pressure
+  - **Ramp**: Building mana → Race before big spell
+- Check opponent threat_level and political_value
+
+### 2. Check for Lethal (NEW!)
+- Use `can_i_win()` to see if you have lethal damage
+- If lethal available: Plan to attack that opponent this turn
+- If not lethal: Evaluate strategic value of each attack
+
+### 3. Declare Attackers (IF ATTACK PHASE)
+- Consider: Who is the biggest threat?
+- Consider: Can I afford to tap these creatures?
+- Consider: Will this lethal an opponent?
+- Consider: Do I need to hold back defenders for next turn?
+
+### Combat Math
+- Your creature's power vs opponent's toughness
+- Their blockers vs your creatures
+- Evasion abilities (flying, unblockable, shadow)
+- Combat trick possibilities (pump spells, removal)
+
+### 4. Declare Blockers (IF BLOCK PHASE)
 - Consider: What can I afford to lose?
-- Consider: Can I kill their attacker?
+- Consider: Can I kill their attacker with a good trade?
 - Consider: Is it worth trading creatures?
 - Consider: Can I survive if I don't block?
 
-Think carefully about combat math (power vs toughness).
+### Combat Decisions
+- **Winning position (> 0.7)**: Go for lethal or trades that advance your position
+- **Even position (0.4-0.6)**: Make good trades, don't overextend
+- **Losing position (< 0.4)**: Stabilize, chump block if needed, preserve life total
+
+### Remember
+- Flying creatures are evasive (likely to deal damage)
+- High-toughness creatures are defensive
+- Political value helps: ELIMINATE = kill first, MONITOR = defend against
 """
 
-MAIN_PHASE_PROMPT = """Main Phase - Time to develop your board.
+MAIN_PHASE_PROMPT = """Main Phase - Time to develop your board and execute your strategy.
 
-Priority order:
-1. Play a land if you haven't this turn (mana is crucial)
-2. Cast spells that improve your position
-3. Develop threats (creatures)
-4. Consider holding mana for instant-speed interaction
+## Phase-Specific Tools
+- Use `recommend_strategy` if unsure about priority
+- Use `can_i_win` to check if you can win this turn
+- Use `analyze_opponent` to know what to prepare for
 
-Remember:
-- Mana efficiency: Use your mana wisely
-- Card advantage: Each card counts
-- Board presence: Creatures win games
+## Priority Order
+
+### Priority 1: Play a land (if you haven't this turn)
+- Mana is the foundation of all magic
+- You need mana to cast spells
+
+### Priority 2: Execute your strategy
+- Use `recommend_strategy` result as your guide:
+  - **RAMP**: Cast mana dorks, draw spells, ramp lands
+  - **DEFEND**: Cast removal, board wipes, defensive creatures
+  - **ATTACK**: Cast creatures, pump spells, haste dudes
+  - **CLOSE**: Go for lethal (check `can_i_win`)
+
+### Priority 3: React to board state
+- Remove biggest threats (use `analyze_opponent` + `analyze_threats`)
+- Develop your own threats
+- Build card advantage
+
+### Priority 4: Hold mana for interaction (optional)
+- Sometimes holding mana for instant-speed removal is better
+- Especially if `get_stack_state` shows spells coming
+
+## Mana Efficiency
+- Use your mana wisely
+- More spells this turn (efficiency) > fewer expensive spells (power) usually
+- Unless you're going for a specific combo
+
+## Board Presence
+- Creatures on board win games
+- If ahead: Deploy threats
+- If behind: Deploy removal or defensive creatures
+- If even: Build your position
+
+## Card Advantage
+- Each card in hand is power
+- Drawing is often better than a single spell
+- But sometimes the spell is the play
+
+## Remember
+- You have strategic tools to guide you
+- Trust the position score and strategy recommendation
+- Plan ahead: what's your next turn plan?
 """
