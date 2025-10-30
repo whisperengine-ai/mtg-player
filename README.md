@@ -136,7 +136,6 @@ The game creates detailed log files in the `logs/` directory:
 
 - **Game logs** (`logs/game_YYYYMMDD_HHMMSS_gameid.log`)
   - Turn progression
-```
   - Phase changes
   - Player actions
   - Win/loss conditions
@@ -241,6 +240,11 @@ pytest
 
 # Run with coverage
 pytest --cov=src tests/
+
+# Run specific test file
+pytest tests/test_rules_engine.py -v
+```
+
 ## ✅ Type Checking
 
 ```bash
@@ -249,7 +253,7 @@ python -m mypy --config-file mypy.ini src
 
 ## 🧰 Utilities
 
-- Validate card data against Scryfall (optional):
+Validate card data against Scryfall (optional):
 ```bash
 python validate_cards.py
 ```
@@ -265,10 +269,6 @@ Use the dispatcher:
 ```python
 from data.cards import create_simple_deck
 deck = create_simple_deck(commander_card=None, archetype="control")
-```
-
-# Run specific test file
-pytest tests/test_rules_engine.py -v
 ```
 
 ## 📖 Learning Resources
