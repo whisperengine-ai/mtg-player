@@ -389,12 +389,26 @@ class MTGAgent:
                     message = response.choices[0].message
                     
                     # Extract any reasoning/thinking content if present
+                    # Different providers/models use different field names for extended reasoning
                     reasoning_content = None
                     thinking_content = None
                     
-                    # For OpenAI o-series models with reasoning
-                    if hasattr(response.choices[0], 'message') and hasattr(response.choices[0].message, 'reasoning'):
-                        reasoning_content = getattr(response.choices[0].message, 'reasoning', None)
+                    # Check multiple possible reasoning field names (order matters - most specific first)
+                    reasoning_fields = [
+                        'reasoning_content',  # LM Studio Qwen3-thinking, Ollama reasoning models
+                        'reasoning',          # OpenAI o1/o3 series
+                        'thinking',           # DeepSeek-R1, some reasoning models
+                        'thoughts',           # Some custom models
+                        'inner_thoughts',     # Some agent-based models
+                        'scratchpad',         # Some fine-tuned reasoning models
+                    ]
+                    
+                    for field in reasoning_fields:
+                        if hasattr(message, field):
+                            value = getattr(message, field, None)
+                            if value:  # Only use non-empty values
+                                reasoning_content = value
+                                break  # Use first matching field
                     
                     # Check for extended response data (some providers include thinking in metadata)
                     if hasattr(response, 'usage') and hasattr(response.usage, 'completion_tokens_details'):
