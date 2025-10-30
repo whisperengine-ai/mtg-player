@@ -37,7 +37,8 @@ class MTGAgent:
         game_state: GameState,
         rules_engine: RulesEngine,
         llm_client: Any = None,
-        verbose: bool = False
+        verbose: bool = False,
+        llm_logger: Any = None
     ):
         """
         Initialize the agent.
@@ -47,10 +48,12 @@ class MTGAgent:
             rules_engine: Rules engine for validation
             llm_client: LLM client (OpenAI, Anthropic, etc.) - if None, will auto-initialize
             verbose: Whether to print reasoning
+            llm_logger: LLM logger for recording prompts/responses
         """
         self.game_state = game_state
         self.rules_engine = rules_engine
         self.verbose = verbose
+        self.llm_logger = llm_logger
         
         # Initialize LLM client if not provided
         if llm_client is None:
@@ -339,9 +342,49 @@ class MTGAgent:
                             # OpenAI reasoning models support an optional effort selector
                             params["reasoning"] = {"effort": self.reasoning_effort}
 
+                    # Log LLM call
+                    if self.llm_logger:
+                        active_player = self.game_state.get_active_player()
+                        player_name = active_player.name if active_player else "Unknown"
+                        phase_str = f"{self.game_state.current_phase.value}/{self.game_state.current_step.value}"
+                        self.llm_logger.log_llm_call(
+                            player_name=player_name,
+                            turn=self.game_state.turn_number,
+                            phase=phase_str,
+                            model=self.model,
+                            messages=self.messages,
+                            tools=self._get_tool_schemas()
+                        )
+
                     response = self.llm_client.chat.completions.create(**params)
                     
                     message = response.choices[0].message
+                    
+                    # Extract any reasoning/thinking content if present
+                    reasoning_content = None
+                    thinking_content = None
+                    
+                    # For OpenAI o-series models with reasoning
+                    if hasattr(response.choices[0], 'message') and hasattr(response.choices[0].message, 'reasoning'):
+                        reasoning_content = getattr(response.choices[0].message, 'reasoning', None)
+                    
+                    # Check for extended response data (some providers include thinking in metadata)
+                    if hasattr(response, 'usage') and hasattr(response.usage, 'completion_tokens_details'):
+                        # Some models provide reasoning token counts
+                        details = response.usage.completion_tokens_details
+                        if hasattr(details, 'reasoning_tokens') and details.reasoning_tokens > 0:
+                            thinking_content = f"[Model used {details.reasoning_tokens} reasoning tokens]"
+                    
+                    # Log response with all available content
+                    if self.llm_logger:
+                        self.llm_logger.log_llm_response(
+                            response_content=message.content,
+                            tool_calls=message.tool_calls,
+                            finish_reason=response.choices[0].finish_reason,
+                            reasoning_content=reasoning_content,
+                            thinking_content=thinking_content,
+                            usage=response.usage if hasattr(response, 'usage') else None
+                        )
                     
                     # If no tool calls, LLM is done reasoning
                     if not message.tool_calls:
@@ -353,8 +396,21 @@ class MTGAgent:
                         
                         if self.verbose and message.content:
                             print(f"💭 LLM: {message.content}")
+                        
+                        # Include reasoning in decision if available
+                        decision_reasoning = message.content or "No action needed"
+                        if reasoning_content:
+                            decision_reasoning = f"{decision_reasoning}\n[Reasoning: {reasoning_content[:200]}...]"
+                        
+                        # Log decision
+                        decision = {"type": "pass", "reasoning": decision_reasoning}
+                        if self.llm_logger:
+                            active_player = self.game_state.get_active_player()
+                            player_name = active_player.name if active_player else "Unknown"
+                            self.llm_logger.log_decision(player_name, decision)
+                        
                         # Parse action from content or return pass
-                        return {"type": "pass", "reasoning": message.content or "No action needed"}
+                        return decision
                     
                     # Add assistant message with tool calls to history
                     self.messages.append({
@@ -383,6 +439,10 @@ class MTGAgent:
                         if tool:
                             try:
                                 result = tool.execute(**function_args)
+                                
+                                # Log tool execution
+                                if self.llm_logger:
+                                    self.llm_logger.log_tool_execution(function_name, function_args, result)
                                 
                                 # Special case: if execute_action was called, save it to return
                                 if function_name == "execute_action":
@@ -416,6 +476,10 @@ class MTGAgent:
                     
                     # If execute_action was called, return that action
                     if action_to_execute:
+                        if self.llm_logger:
+                            active_player = self.game_state.get_active_player()
+                            player_name = active_player.name if active_player else "Unknown"
+                            self.llm_logger.log_decision(player_name, action_to_execute)
                         return action_to_execute
                 
                 elif self.llm_provider == "anthropic":

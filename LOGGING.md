@@ -1,0 +1,211 @@
+# Logging System
+
+The MTG Commander AI includes comprehensive logging to help you understand game progression and LLM decision-making.
+
+## Log Files
+
+All logs are saved to the `logs/` directory with timestamped filenames:
+
+### Game Logs
+**File**: `logs/game_YYYYMMDD_HHMMSS_gameid.log`
+
+**Contains**:
+- Turn start announcements
+- Phase transitions
+- Player actions (play land, cast spell, attack, etc.)
+- Game state snapshots
+- Win/loss conditions
+- Errors and forced phase advances
+
+**Example**:
+```
+2025-10-30 05:42:57,553 - INFO - Game started: 963c7491-4a74-4dca-92b7-261293787425
+2025-10-30 05:42:57,571 - INFO - TURN 1 | Player 1 (Ramp) | beginning/untap
+2025-10-30 05:42:58,123 - INFO - PHASE CHANGE | beginning/untap → beginning/upkeep
+2025-10-30 05:42:59,456 - INFO - ACTION | Player 1 (Ramp) | play_land | Forest
+2025-10-30 05:43:15,789 - INFO - GAME END | Winner: Player 1 (Ramp) | Reason: all opponents eliminated
+```
+
+### LLM Logs
+**File**: `logs/llm_YYYYMMDD_HHMMSS_gameid.log`
+
+**Contains**:
+- Complete prompts sent to the LLM (system + user messages)
+- Full LLM responses
+- Extended thinking/reasoning (for o-series models)
+- Tool calls with arguments
+- Tool execution results (untruncated JSON)
+- Final decisions with reasoning
+- Token usage statistics (prompt, completion, reasoning tokens)
+
+**Example**:
+```
+2025-10-30 05:42:57,571 - INFO - ================================================================================
+2025-10-30 05:42:57,571 - INFO - LLM CALL #1 | Player 1 (Ramp) | Turn 1 | beginning/untap
+2025-10-30 05:42:57,571 - INFO - Model: openai/gpt-4o-mini
+2025-10-30 05:42:57,571 - INFO - --------------------------------------------------------------------------------
+2025-10-30 05:42:57,571 - INFO - MESSAGES:
+2025-10-30 05:42:57,571 - INFO -   [0] SYSTEM:
+2025-10-30 05:42:57,571 - INFO -     You are an AI agent playing Magic: The Gathering Commander format.
+2025-10-30 05:42:57,571 - INFO -     
+2025-10-30 05:42:57,571 - INFO -     Your goal is to make strategic decisions to win the game...
+2025-10-30 05:42:57,571 - INFO -   [1] USER:
+2025-10-30 05:42:57,571 - INFO -     It's your turn. Current phase: beginning, Step: untap
+2025-10-30 05:42:57,571 - INFO -     
+2025-10-30 05:42:57,571 - INFO -     Think through this step by step...
+2025-10-30 05:42:57,571 - INFO - --------------------------------------------------------------------------------
+2025-10-30 05:42:57,571 - INFO - TOOLS: 6 available
+2025-10-30 05:42:57,571 - DEBUG -   - get_game_state
+2025-10-30 05:42:57,571 - DEBUG -   - get_legal_actions
+2025-10-30 05:42:57,571 - DEBUG -   - execute_action
+2025-10-30 05:42:57,571 - DEBUG -   - analyze_threats
+2025-10-30 05:42:57,571 - DEBUG -   - get_stack_state
+2025-10-30 05:42:57,571 - DEBUG -   - can_respond
+2025-10-30 05:43:03,392 - INFO - --------------------------------------------------------------------------------
+2025-10-30 05:43:03,392 - INFO - LLM RESPONSE:
+2025-10-30 05:43:03,392 - INFO - Thinking: [Model used 64 reasoning tokens]
+2025-10-30 05:43:03,392 - INFO - Tool Calls: 5
+2025-10-30 05:43:03,392 - INFO -   - get_game_state({})
+2025-10-30 05:43:03,392 - INFO -   - get_stack_state({})
+2025-10-30 05:43:03,392 - INFO -   - can_respond({})
+2025-10-30 05:43:03,392 - INFO -   - analyze_threats({})
+2025-10-30 05:43:03,392 - INFO -   - get_legal_actions({})
+2025-10-30 05:43:03,392 - INFO - Token Usage:
+2025-10-30 05:43:03,392 - INFO -   Prompt: 245
+2025-10-30 05:43:03,392 - INFO -   Completion: 150
+2025-10-30 05:43:03,392 - INFO -   Total: 395
+2025-10-30 05:43:03,392 - INFO -   Reasoning: 64
+2025-10-30 05:43:03,392 - INFO - Finish Reason: tool_calls
+2025-10-30 05:43:03,392 - INFO - ================================================================================
+2025-10-30 05:43:03,392 - INFO - TOOL EXEC | get_game_state
+2025-10-30 05:43:03,392 - DEBUG -   Args: {}
+2025-10-30 05:43:03,392 - INFO -   Result:
+2025-10-30 05:43:03,392 - INFO -     {
+2025-10-30 05:43:03,392 - INFO -       "success": true,
+2025-10-30 05:43:03,392 - INFO -       "game_state": {
+2025-10-30 05:43:03,392 - INFO -         "game_id": "963c7491-4a74-4dca-92b7-261293787425",
+2025-10-30 05:43:03,392 - INFO -         "turn_number": 1,
+2025-10-30 05:43:03,392 - INFO -         ...
+```
+
+## Console Output
+
+When running with the `--verbose` flag, you'll see high-level game progress in the console:
+
+```bash
+python run.py --verbose
+```
+
+**Console shows**:
+- ASCII art header
+- Game setup (number of players, deck archetypes)
+- Turn announcements
+- Player life totals
+- Hand size and battlefield state
+- Creature counts
+- Game end conditions
+- Log file locations
+
+**Console does NOT show**:
+- Detailed LLM prompts and responses
+- Tool execution details
+- Token usage statistics
+- Extended reasoning content
+
+This keeps the console output clean and readable while capturing all details in log files.
+
+## Logging Architecture
+
+### Two Loggers
+
+**GameLogger** (`src/utils/logger.py`):
+- Tracks game events
+- Records turn progression
+- Logs player actions
+- Writes to file only (no console)
+
+**LLMLogger** (`src/utils/logger.py`):
+- Captures all LLM API calls
+- Records complete prompts and responses
+- Logs tool calls and results
+- Tracks token usage
+- Extracts reasoning from o-series models
+- Writes to file only (no console)
+
+### No Truncation
+
+All logs are **fully verbose** with no content truncation:
+- Complete message content (no character limits)
+- Full tool call arguments
+- Complete tool execution results (entire JSON responses)
+- Full reasoning and thinking content
+
+This ensures you can debug and analyze every aspect of the game and AI decision-making.
+
+## Usage Tips
+
+### Finding Specific Games
+Log files include timestamp and game ID:
+```
+logs/game_20251030_054257_963c7491.log
+logs/llm_20251030_054257_963c7491.log
+```
+
+The timestamp format is `YYYYMMDD_HHMMSS`, making it easy to find recent games.
+
+### Analyzing Decisions
+To understand why the AI made a specific decision:
+1. Find the turn in the game log
+2. Open the LLM log at the same timestamp
+3. Read the full prompt that was sent
+4. Review the tool calls the AI made
+5. Check the tool execution results
+6. See the final decision with reasoning
+
+### Token Usage
+LLM logs include detailed token statistics:
+- **Prompt tokens**: Input to the model
+- **Completion tokens**: Model's response
+- **Total tokens**: Sum of both
+- **Reasoning tokens**: Extended thinking (o-series models only)
+
+This helps track API costs and understand model efficiency.
+
+### Debugging
+If the game behaves unexpectedly:
+1. Check game log for forced phase advances (indicates stuck AI)
+2. Check LLM log for errors in tool calls
+3. Review tool execution results for unexpected data
+4. Verify the prompts are providing correct context
+
+## Log Retention
+
+Logs are not automatically deleted. The `logs/` directory is gitignored, so logs won't be committed to version control.
+
+To clean up old logs:
+```bash
+# Remove all logs
+rm logs/*.log
+
+# Remove logs older than 7 days (Unix/Mac)
+find logs/ -name "*.log" -mtime +7 -delete
+```
+
+## Implementation Details
+
+The logging system is initialized in `src/main.py`:
+
+```python
+from utils.logger import setup_loggers
+
+# Create unique game ID
+game_id = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{str(uuid.uuid4())[:8]}"
+
+# Initialize both loggers
+game_logger, llm_logger = setup_loggers(game_id)
+
+# Pass to game loop and agent
+agents = {p.id: MTGAgent(..., llm_logger=llm_logger) for p in players}
+```
+
+The agent automatically logs all LLM interactions, and the main game loop logs all game events.

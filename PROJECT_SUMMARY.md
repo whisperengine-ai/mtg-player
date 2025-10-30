@@ -10,22 +10,28 @@ This proof-of-concept includes:
 ### ✅ Core Implementation
 - **Game State Management** - Complete representation of MTG game state
 - **Rules Engine** - Validates and executes game actions
+- **Stack System** - Instant-speed spells, responses, priority passing
 - **Player & Card Models** - Full data structures for cards and players
 - **Turn Structure** - Beginning → Main → Combat → Main → End phases
+- **Multiplayer Support** - 2-4 player Commander format
 
 ### ✅ Agentic AI System
-- **Tool Layer** - 4 core tools for LLM interaction:
+- **Tool Layer** - 6 core tools for LLM interaction:
   - `get_game_state()` - View current game
   - `get_legal_actions()` - See available moves
   - `execute_action()` - Perform validated actions
   - `analyze_threats()` - Evaluate board state
+  - `get_stack_state()` - View the spell stack
+  - `can_respond()` - Check for instant-speed responses
 - **LLM Agent** - Decision-making engine with CoT reasoning
 - **Prompt Templates** - Structured prompts for strategic thinking
+- **OpenRouter Integration** - Access to multiple LLM providers
 
 ### ✅ Supporting Infrastructure
-- **Card Database** - ~50 basic cards (lands, creatures, spells)
-- **Deck Builder** - Creates 100-card Commander decks
-- **Test Suite** - Unit tests for rules and game logic
+- **Card Database** - 151 Commander staple cards
+- **Archetype Deck Builders** - Ramp, Control, Midrange decks
+- **Logging System** - Complete game and LLM interaction logs
+- **Test Suite** - 38 passing tests for rules and game logic
 - **CLI Interface** - Play games with verbose output
 
 ### ✅ Documentation
@@ -53,28 +59,57 @@ LLM Agent (Strategy) → Tools (Bridge) → Rules Engine (Validation)
 
 ## 📊 Current Status
 
-**Phase**: 1 (Foundation) - 80% complete
+**Phase**: 4 (Stack and Instant-Speed) - Complete ✅
 
 ### Working
-- ✅ Basic game loop
-- ✅ Turn structure
-- ✅ Land drops
-- ✅ Spell casting
+- ✅ Complete game loop with phase advancement
+- ✅ Turn structure (all phases and steps)
+- ✅ Land drops and mana management
+- ✅ Spell casting (sorceries, instants, creatures)
 - ✅ Combat (attackers/blockers/damage)
+- ✅ Stack system with priority passing
+- ✅ Instant-speed responses
 - ✅ Win condition detection
-- ✅ Simple rule-based AI
+- ✅ LLM-powered AI decision making
+- ✅ Complete logging (game events + LLM interactions)
+- ✅ Multiplayer (2-4 players)
+- ✅ 38 tests passing
 
-
-### Next Steps (Phase 2)
+### Next Steps (Phase 5+)
+- Triggered abilities (enters-the-battlefield, dies, etc.)
+- More complex card abilities
+- Better threat assessment
+- Mana curve optimization
+- Meta-game learning
 
 ## 🎮 How to Use
+
+### Quick Start
+```bash
+# Install dependencies
 pip install -r requirements.txt
 
-### Add LLM (Future)
-```bash
-# Run with LLM
-python src/main.py --llm
+# Set up API key
+cp .env.example .env
+# Edit .env with your OpenRouter or OpenAI key
+
+# Run the game
+python run.py --verbose           # 4-player game with console output
+python run.py --players=2         # 2-player game, logs only
 ```
+
+### Logging
+
+**Console output** (with `--verbose`):
+- Turn-by-turn game progress
+- Player life and board state
+- Game results
+
+**Log files** (in `logs/` directory):
+- `game_*.log` - Turn progression, actions, phase changes
+- `llm_*.log` - Complete LLM prompts, responses, reasoning, tool calls, token usage
+
+All LLM interactions are logged to files, keeping console output clean and readable.
 
 ## 📈 Development Roadmap
 

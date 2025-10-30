@@ -42,6 +42,7 @@ htmlcov/
 
 # Logs
 *.log
+logs/
 
 # macOS
 .DS_Store

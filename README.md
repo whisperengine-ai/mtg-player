@@ -74,12 +74,39 @@ cp .env.example .env
 ### Run the Game
 
 ```bash
-python run.py              # default settings
-python run.py --verbose    # verbose logging
+python run.py                      # Default: 4 players, quiet mode
+python run.py --verbose            # With turn-by-turn output to console
+python run.py --players=2          # 2-player game
+python run.py --players=2 --verbose  # 2-player with console output
 
 # Alternative entry (without run.py)
 PYTHONPATH=./src python src/main.py --verbose
 ```
+
+### Logging
+
+The game creates detailed log files in the `logs/` directory:
+
+- **Game logs** (`logs/game_YYYYMMDD_HHMMSS_gameid.log`)
+  - Turn progression
+  - Phase changes
+  - Player actions
+  - Win/loss conditions
+
+- **LLM logs** (`logs/llm_YYYYMMDD_HHMMSS_gameid.log`)
+  - Full prompts sent to the LLM
+  - Complete responses (including reasoning/thinking for o-series models)
+  - Tool calls and results
+  - Token usage statistics
+  - Decision reasoning
+
+**Console output** (with `--verbose` flag):
+- High-level game progress
+- Turn announcements
+- Player life totals and board state
+- Game results
+
+All detailed logging goes to files only, keeping console output clean and readable.
 
 ## 📁 Project Structure (src layout)
 
@@ -89,27 +116,29 @@ mtg-player/
 ├── ROADMAP.md              # Detailed implementation roadmap
 ├── requirements.txt
 ├── .env.example
+├── logs/                   # Auto-generated game and LLM logs
 ├── src/
 │   ├── main.py            # Entry point (supports archetype decks)
 │   ├── core/
 │   │   ├── game_state.py  # Game state representation
 │   │   ├── player.py      # Player state
 │   │   ├── card.py        # Card models
-│   │   └── rules_engine.py # Core rules implementation
+│   │   ├── rules_engine.py # Core rules implementation
+│   │   └── stack.py       # Stack implementation
 │   ├── agent/
 │   │   ├── llm_agent.py   # LLM decision-making agent
-│   │   ├── tools.py       # Tool definitions for LLM
 │   │   └── prompts.py     # Prompt templates
 │   ├── tools/
-│   │   ├── game_tools.py  # Game state tools
-│   │   ├── analysis_tools.py # Threat assessment, etc.
-│   │   └── combat_tools.py # Combat simulation
+│   │   └── game_tools.py  # Game state and action tools
+│   ├── utils/
+│   │   └── logger.py      # Game and LLM logging utilities
 │   └── data/
 │       └── cards.py       # Card database + deck builders
 ├── tests/
 │   ├── test_rules_engine.py
-│   ├── test_game_state.py
-│   └── test_agent.py
+│   ├── test_stack.py
+│   ├── test_instant_speed.py
+│   └── test_llm_agent.py
 └── notebooks/
     └── exploration.ipynb  # For experimentation
 ```

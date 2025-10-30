@@ -5,6 +5,7 @@ import sys
 import random
 import uuid
 from pathlib import Path
+from datetime import datetime
 
 # Load environment variables from .env file
 from dotenv import load_dotenv
@@ -23,6 +24,7 @@ from core.rules_engine import RulesEngine
 from core.card import Card, CardType, ManaCost, Color, CardInstance
 from agent.llm_agent import MTGAgent
 from data.cards import create_simple_deck
+from utils.logger import setup_loggers
 
 
 def create_simple_commander():
@@ -136,17 +138,30 @@ def play_game(game_state, rules_engine, max_full_turns=10, verbose=True):
     a non-passing action (e.g., plays a land).
     """
 
+    # Set up loggers
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    game_id = f"{timestamp}_{game_state.game_id[:8]}"
+    game_logger, llm_logger = setup_loggers(game_id)
+    
+    # Log game setup
+    game_logger.log_game_state({
+        "game_id": game_state.game_id,
+        "players": [{"id": p.id, "name": p.name, "life": p.life} for p in game_state.players],
+        "turn": game_state.turn_number
+    })
+
     # Start the game
     rules_engine.start_game()
 
     if verbose:
         print(f"\n{'='*60}")
         print("🎲 GAME START")
+        print(f"📝 Logs saved to: logs/game_{game_id}.log and logs/llm_{game_id}.log")
         print(f"{'='*60}\n")
         print(game_state)
 
-    # Create agents for each player
-    agents = {p.id: MTGAgent(game_state=game_state, rules_engine=rules_engine, verbose=verbose)
+    # Create agents for each player with logger
+    agents = {p.id: MTGAgent(game_state=game_state, rules_engine=rules_engine, verbose=verbose, llm_logger=llm_logger)
               for p in game_state.players}
 
     # Drive the game by steps, but cap by full-turns to avoid infinite loops
@@ -166,6 +181,14 @@ def play_game(game_state, rules_engine, max_full_turns=10, verbose=True):
             print(f"Hand: {len(active_player.hand)} cards")
             print(f"Battlefield: {len(active_player.battlefield)} permanents")
             print(f"Creatures: {len(active_player.creatures_in_play())}")
+        
+        # Log turn start
+        game_logger.log_turn_start(
+            turn=game_state.turn_number,
+            player_name=active_player.name,
+            phase=game_state.current_phase.value,
+            step=game_state.current_step.value
+        )
 
         # Snapshot to detect whether the agent advanced the phase
         prev_snapshot = (
@@ -182,6 +205,7 @@ def play_game(game_state, rules_engine, max_full_turns=10, verbose=True):
         except Exception as e:
             if verbose:
                 print(f"❌ Error during turn: {e}")
+            game_logger.log_error(f"Turn error for {active_player.name}: {e}")
         
         # If nothing changed (no pass/advance), force an advance to keep game moving
         post_snapshot = (
@@ -191,7 +215,22 @@ def play_game(game_state, rules_engine, max_full_turns=10, verbose=True):
             game_state.turn_number,
         )
         if post_snapshot == prev_snapshot:
+            # Log forced phase advance
+            game_logger.log_phase_change(
+                old_phase=game_state.current_phase.value,
+                old_step=game_state.current_step.value,
+                new_phase="advancing",
+                new_step="forced"
+            )
             rules_engine.advance_phase()
+        elif post_snapshot != prev_snapshot:
+            # Phase changed naturally
+            game_logger.log_phase_change(
+                old_phase=prev_snapshot[0].value,
+                old_step=prev_snapshot[1].value,
+                new_phase=post_snapshot[0].value,
+                new_step=post_snapshot[1].value
+            )
 
         # Check win conditions after each step
         game_state.check_win_condition()
@@ -207,14 +246,19 @@ def play_game(game_state, rules_engine, max_full_turns=10, verbose=True):
             winner = game_state.get_player(game_state.winner_id)
             print(f"\n🎉 Winner: {winner.name}!")
             print(f"Final life total: {winner.life}")
+            game_logger.log_win_condition(winner.name, "Life total or commander damage")
         else:
             reason = "turn limit" if (game_state.turn_number - starting_turn) >= max_full_turns or steps_executed >= max_steps else "no winner"
             print(f"\n🤝 Game ended in a draw ({reason})")
+            game_logger.log_win_condition(None, reason)
 
         print("\nFinal standings:")
         for player in game_state.players:
             status = "💀 Eliminated" if player.is_dead() else f"❤️ {player.life} life"
             print(f"  {player.name}: {status}")
+        
+        print(f"\n📝 Game log: logs/game_{game_id}.log")
+        print(f"📝 LLM log: logs/llm_{game_id}.log")
 
 
 def main():
