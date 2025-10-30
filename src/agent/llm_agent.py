@@ -356,13 +356,18 @@ class MTGAgent:
                 # Call LLM based on provider
                 if self.llm_provider in ["openai", "openrouter", "ollama", "lmstudio"]:
                     # Build base params
+                    # Use higher max_tokens for reasoning models that output long chain-of-thought
+                    # Standard models: 2000 tokens is usually enough
+                    # Reasoning models (DeepSeek-R1, Qwen3-thinking, o1/o3): need 4000-8000 tokens
+                    max_tokens = int(os.getenv("LLM_MAX_TOKENS", "4000"))
+                    
                     params: Dict[str, Any] = {
                         "model": self.model,
                         "messages": self.messages,
                         "tools": self._get_tool_schemas(),
                         "tool_choice": "auto",
                         "temperature": 0.7,
-                        "max_tokens": 2000,
+                        "max_tokens": max_tokens,
                     }
                     # Optional: enable provider-specific thinking/reasoning
                     if self.thinking_mode:
@@ -526,9 +531,12 @@ class MTGAgent:
                 
                 elif self.llm_provider == "anthropic":
                     # Anthropic has different API - simplified for now
+                    # Use configurable max_tokens (same as above)
+                    max_tokens = int(os.getenv("LLM_MAX_TOKENS", "4000"))
+                    
                     response = self.llm_client.messages.create(
                         model=self.model,
-                        max_tokens=2000,
+                        max_tokens=max_tokens,
                         messages=self.messages,
                         temperature=0.7
                     )
