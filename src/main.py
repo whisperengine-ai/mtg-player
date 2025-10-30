@@ -4,7 +4,6 @@ Main entry point for MTG Commander AI.
 import sys
 import random
 import uuid
-import os
 from pathlib import Path
 
 # Load environment variables from .env file
@@ -129,32 +128,35 @@ def setup_game(num_players=4, verbose=True, archetypes=None):
     return game_state, rules_engine
 
 
-def play_game(game_state, rules_engine, max_turns=20, verbose=True):
-    """Play a game of Commander."""
-    
+def play_game(game_state, rules_engine, max_full_turns=10, verbose=True):
+    """Play a game of Commander with simple auto-progression through phases.
+
+    We progress the game by ensuring each loop iteration advances at least one
+    phase/step. This avoids getting stuck in the same step when the agent takes
+    a non-passing action (e.g., plays a land).
+    """
+
     # Start the game
     rules_engine.start_game()
-    
+
     if verbose:
         print(f"\n{'='*60}")
         print("🎲 GAME START")
         print(f"{'='*60}\n")
         print(game_state)
-    
+
     # Create agents for each player
-    agents = {}
-    for player in game_state.players:
-        agents[player.id] = MTGAgent(
-            game_state=game_state,
-            rules_engine=rules_engine,
-            verbose=verbose
-        )
-    
-    # Game loop
-    turn_count = 0
-    while not game_state.is_game_over and turn_count < max_turns:
+    agents = {p.id: MTGAgent(game_state=game_state, rules_engine=rules_engine, verbose=verbose)
+              for p in game_state.players}
+
+    # Drive the game by steps, but cap by full-turns to avoid infinite loops
+    starting_turn = game_state.turn_number
+    max_steps = max_full_turns * 20  # generous upper bound of steps per turn
+    steps_executed = 0
+
+    while not game_state.is_game_over and (game_state.turn_number - starting_turn) < max_full_turns and steps_executed < max_steps:
         active_player = game_state.get_active_player()
-        
+
         if verbose:
             print(f"\n{'='*60}")
             print(f"Turn {game_state.turn_number} - {active_player.name}'s turn")
@@ -164,44 +166,52 @@ def play_game(game_state, rules_engine, max_turns=20, verbose=True):
             print(f"Hand: {len(active_player.hand)} cards")
             print(f"Battlefield: {len(active_player.battlefield)} permanents")
             print(f"Creatures: {len(active_player.creatures_in_play())}")
-        
-        # Get the agent for this player
+
+        # Snapshot to detect whether the agent advanced the phase
+        prev_snapshot = (
+            game_state.current_phase,
+            game_state.current_step,
+            game_state.active_player_id,
+            game_state.turn_number,
+        )
+
+        # Get agent and try one decision
         agent = agents[active_player.id]
-        
-        # Take actions for this phase
         try:
             agent.take_turn_action()
         except Exception as e:
             if verbose:
                 print(f"❌ Error during turn: {e}")
-            # Skip to next phase
+        
+        # If nothing changed (no pass/advance), force an advance to keep game moving
+        post_snapshot = (
+            game_state.current_phase,
+            game_state.current_step,
+            game_state.active_player_id,
+            game_state.turn_number,
+        )
+        if post_snapshot == prev_snapshot:
             rules_engine.advance_phase()
-        
-        # Check for game over
+
+        # Check win conditions after each step
         game_state.check_win_condition()
-        
-        turn_count += 1
-        
-        # Safety: limit turns
-        if turn_count >= max_turns:
-            if verbose:
-                print(f"\n⏱️ Game ended due to turn limit ({max_turns} turns)")
-            break
-    
-    # Game over
+        steps_executed += 1
+
+    # Game finished (win, draw, or loop cap)
     if verbose:
         print(f"\n{'='*60}")
         print("🏁 GAME OVER")
         print(f"{'='*60}")
-        
+
         if game_state.winner_id:
             winner = game_state.get_player(game_state.winner_id)
             print(f"\n🎉 Winner: {winner.name}!")
             print(f"Final life total: {winner.life}")
         else:
-            print("\n🤝 Game ended in a draw")
-        
-        print(f"\nFinal standings:")
+            reason = "turn limit" if (game_state.turn_number - starting_turn) >= max_full_turns or steps_executed >= max_steps else "no winner"
+            print(f"\n🤝 Game ended in a draw ({reason})")
+
+        print("\nFinal standings:")
         for player in game_state.players:
             status = "💀 Eliminated" if player.is_dead() else f"❤️ {player.life} life"
             print(f"  {player.name}: {status}")
@@ -234,7 +244,7 @@ def main():
     
     # Set up and play game
     game_state, rules_engine = setup_game(num_players=num_players, verbose=verbose)
-    play_game(game_state, rules_engine, max_turns=10, verbose=verbose)
+    play_game(game_state, rules_engine, max_full_turns=10, verbose=verbose)
     
     print("\n✨ Thanks for playing! ✨\n")
 
