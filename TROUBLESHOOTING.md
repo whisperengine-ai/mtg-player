@@ -304,7 +304,7 @@ If you're still stuck:
 1. Check the error message carefully
 2. Look for similar issues in the documentation
 3. Try the "Fresh start" approach above
-4. Check that you're using Python 3.11 or later
+4. Check that you're using Python 3.13 or later
 5. Verify all files are present in the correct structure
 
 Remember: This is a learning project and a proof-of-concept. Some rough edges are expected! 🎲

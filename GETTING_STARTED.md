@@ -110,7 +110,7 @@ Open your terminal and run these commands:
 
 ```bash
 # Navigate to project
-cd /Users/markcastillo/git/mtg-player
+cd /path/to/mtg-player
 
 # Create virtual environment
 python3 -m venv venv

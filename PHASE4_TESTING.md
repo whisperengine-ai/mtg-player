@@ -212,7 +212,7 @@ The system is ready for:
 ## 📝 Test File Details
 
 ### Location
-`/Users/markcastillo/git/mtg-player/tests/test_instant_speed.py`
+`tests/test_instant_speed.py`
 
 ### Lines of Code
 ~500 lines of comprehensive test code

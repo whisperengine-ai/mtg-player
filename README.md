@@ -49,7 +49,7 @@ Credit: Inspired by Discord User "SkillsMcGee" (210509006043742208)
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Python 3.11+
+- Python 3.13+
 - OpenAI API key (or Anthropic, or local Ollama/LM Studio)
 
 ### Installation

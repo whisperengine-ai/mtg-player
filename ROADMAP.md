@@ -199,7 +199,7 @@ Build an AI agent capable of playing Magic: The Gathering Commander using LLM-po
 ## Technology Stack Recommendations
 
 ### Core Technologies
-- **Language**: Python 3.11+ (excellent LLM libraries)
+- **Language**: Python 3.13+ (excellent LLM libraries)
 - **LLM Framework**: LangChain or LlamaIndex (tool calling, agents)
 - **LLM Provider**: 
   - OpenAI GPT-4 (best reasoning)
