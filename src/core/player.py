@@ -101,13 +101,25 @@ class Player(BaseModel):
 
     def available_mana(self) -> ManaPool:
         """Calculate available mana from untapped lands."""
-        # Simplified: assume each land taps for 1 colorless
-        # In a full implementation, would check land types
+        from src.core.card import Color
+        
         mana = ManaPool()
         for land in self.untapped_lands():
-            # Basic lands logic would go here
-            # For now, just add colorless
-            mana.colorless += 1
+            # Check for basic land types by name or colors
+            land_name = land.card.name.lower()
+            if "plains" in land_name or Color.WHITE in land.card.colors:
+                mana.white += 1
+            elif "island" in land_name or Color.BLUE in land.card.colors:
+                mana.blue += 1
+            elif "swamp" in land_name or Color.BLACK in land.card.colors:
+                mana.black += 1
+            elif "mountain" in land_name or Color.RED in land.card.colors:
+                mana.red += 1
+            elif "forest" in land_name or Color.GREEN in land.card.colors:
+                mana.green += 1
+            else:
+                # Non-basic lands produce colorless for now
+                mana.colorless += 1
         
         # Add existing mana pool
         mana.white += self.mana_pool.white

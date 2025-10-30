@@ -36,6 +36,10 @@ class RulesEngine:
 
     def advance_phase(self):
         """Move to the next phase."""
+        # Clear all players' mana pools (rule 500.4: mana empties at end of each step/phase)
+        for player in self.game_state.players:
+            player.mana_pool.clear()
+        
         phase_order = [
             (Phase.BEGINNING, Step.UNTAP),
             (Phase.BEGINNING, Step.UPKEEP),
@@ -119,9 +123,6 @@ class RulesEngine:
             card.is_tapped = False
             card.summoning_sick = False
         
-        # Clear mana pool
-        player.mana_pool.clear()
-        
         # Reset land drop for the turn
         player.has_played_land_this_turn = False
 
@@ -136,11 +137,6 @@ class RulesEngine:
             card.temp_power_bonus = 0
             card.temp_toughness_bonus = 0
             card.damage_marked = 0
-        
-        # Clear mana pool
-        player.mana_pool.clear()
-        
-        # NOTE: has_played_land_this_turn is reset in untap_step, not here
         
         # Discard to hand size (7)
         # Simplified: assume hand size is 7
@@ -190,6 +186,8 @@ class RulesEngine:
 
     def cast_spell(self, player: Player, card_instance: CardInstance, targets: Optional[List[str]] = None) -> bool:
         """Cast a spell from hand - puts it on the stack."""
+        from src.core.card import Color
+        
         # Validation
         if card_instance not in player.hand:
             return False
@@ -197,20 +195,87 @@ class RulesEngine:
         if card_instance.card.is_land():
             return False
         
-        # Check mana (simplified)
+        # Check if we can afford the spell
         available_mana = player.available_mana()
-        required_mana = card_instance.card.mana_cost.total()
+        cost = card_instance.card.mana_cost
         
-        if available_mana.total() < required_mana:
+        # Check colored mana requirements
+        if cost.white > available_mana.white:
+            return False
+        if cost.blue > available_mana.blue:
+            return False
+        if cost.black > available_mana.black:
+            return False
+        if cost.red > available_mana.red:
+            return False
+        if cost.green > available_mana.green:
             return False
         
-        # Pay mana (simplified: just remove from pool/tap lands)
-        mana_to_pay = required_mana
+        # Check if we have enough total mana for generic + colorless costs
+        colored_cost = cost.white + cost.blue + cost.black + cost.red + cost.green
+        generic_cost = cost.generic + cost.colorless
+        if available_mana.total() < colored_cost + generic_cost:
+            return False
+        
+        # Pay mana - tap lands in order: colored requirements first, then generic
+        lands_to_tap = []
+        remaining_cost = {
+            'white': cost.white,
+            'blue': cost.blue,
+            'black': cost.black,
+            'red': cost.red,
+            'green': cost.green,
+            'generic': cost.generic + cost.colorless
+        }
+        
+        # First, tap lands for colored mana
         for land in player.untapped_lands():
-            if mana_to_pay <= 0:
+            if land in lands_to_tap:
+                continue
+                
+            land_name = land.card.name.lower()
+            
+            # Pay white mana
+            if remaining_cost['white'] > 0 and ("plains" in land_name or Color.WHITE in land.card.colors):
+                lands_to_tap.append(land)
+                remaining_cost['white'] -= 1
+                continue
+            
+            # Pay blue mana
+            if remaining_cost['blue'] > 0 and ("island" in land_name or Color.BLUE in land.card.colors):
+                lands_to_tap.append(land)
+                remaining_cost['blue'] -= 1
+                continue
+            
+            # Pay black mana
+            if remaining_cost['black'] > 0 and ("swamp" in land_name or Color.BLACK in land.card.colors):
+                lands_to_tap.append(land)
+                remaining_cost['black'] -= 1
+                continue
+            
+            # Pay red mana
+            if remaining_cost['red'] > 0 and ("mountain" in land_name or Color.RED in land.card.colors):
+                lands_to_tap.append(land)
+                remaining_cost['red'] -= 1
+                continue
+            
+            # Pay green mana
+            if remaining_cost['green'] > 0 and ("forest" in land_name or Color.GREEN in land.card.colors):
+                lands_to_tap.append(land)
+                remaining_cost['green'] -= 1
+                continue
+        
+        # Then, tap any remaining lands for generic cost
+        for land in player.untapped_lands():
+            if remaining_cost['generic'] <= 0:
                 break
+            if land not in lands_to_tap:
+                lands_to_tap.append(land)
+                remaining_cost['generic'] -= 1
+        
+        # Tap all the lands
+        for land in lands_to_tap:
             land.is_tapped = True
-            mana_to_pay -= 1
         
         # Move card from hand and put on stack
         player.hand.remove(card_instance)
