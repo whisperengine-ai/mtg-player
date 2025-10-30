@@ -197,11 +197,26 @@ class ExecuteActionTool(Tool):
         
         try:
             if action_type == "pass":
-                self.rules_engine.advance_phase()
-                return {
-                    "success": True,
-                    "message": "Passed priority, advanced phase"
-                }
+                # First, try to pass priority (handles stack resolution)
+                should_advance = self.rules_engine.pass_priority()
+                
+                # If all players passed and stack is empty, advance phase
+                if should_advance and self.rules_engine.stack.is_empty():
+                    self.rules_engine.advance_phase()
+                    return {
+                        "success": True,
+                        "message": "All players passed, advanced to next phase"
+                    }
+                elif not self.rules_engine.stack.is_empty():
+                    return {
+                        "success": True,
+                        "message": "Passed priority, stack resolving or awaiting other players"
+                    }
+                else:
+                    return {
+                        "success": True,
+                        "message": "Passed priority"
+                    }
             
             elif action_type == "play_land":
                 card_id = action.get("card_id")

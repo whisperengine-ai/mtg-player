@@ -107,6 +107,9 @@ class RulesEngine:
             self.untap_step(active_player)
         elif step == Step.DRAW:
             self.draw_step(active_player)
+        elif step == Step.COMBAT_DAMAGE:
+            # Auto-resolve combat damage
+            self.resolve_combat_damage()
         elif step == Step.CLEANUP:
             self.cleanup_step(active_player)
 
@@ -118,6 +121,9 @@ class RulesEngine:
         
         # Clear mana pool
         player.mana_pool.clear()
+        
+        # Reset land drop for the turn
+        player.has_played_land_this_turn = False
 
     def draw_step(self, player: Player):
         """Draw a card."""
@@ -134,8 +140,7 @@ class RulesEngine:
         # Clear mana pool
         player.mana_pool.clear()
         
-        # Reset land drop
-        player.has_played_land_this_turn = False
+        # NOTE: has_played_land_this_turn is reset in untap_step, not here
         
         # Discard to hand size (7)
         # Simplified: assume hand size is 7
