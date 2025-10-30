@@ -75,7 +75,7 @@ cp .env.example .env
 
 ```bash
 # Basic commands
-python run.py                      # Default: 4 players, 10 turns, quiet mode
+python run.py                      # Default: 4 players, 10 turns, quiet mode, balanced aggression
 python run.py --verbose            # With turn-by-turn output to console
 python run.py --help               # Show all available options
 
@@ -83,13 +83,21 @@ python run.py --help               # Show all available options
 python run.py --players=2          # 2-player game
 python run.py --players=2 --verbose  # 2-player with console output
 python run.py --max-turns=5        # Short 5-turn game
+python run.py --max-turns=100      # Longer game (more likely to see winners)
+
+# Aggression levels (affects combat strategy)
+python run.py --aggression=aggressive --max-turns=50   # Attack with ALL creatures
+python run.py --aggression=balanced                    # Attack with power 2+ (default)
+python run.py --aggression=conservative                # Only attack with power 3+
 
 # Heuristic mode (no LLM calls - for testing without API costs)
 python run.py --no-llm --verbose   # Use rule-based AI instead of LLM
 python run.py --heuristic          # Alternative flag name
+python run.py --no-llm --aggression=aggressive  # Aggressive heuristic AI
 
 # Combine options
-python run.py --players=2 --max-turns=3 --no-llm --verbose
+python run.py --players=2 --max-turns=50 --aggression=aggressive --verbose
+python run.py --no-llm --aggression=aggressive --max-turns=100 --verbose
 
 # Alternative entry (without run.py)
 PYTHONPATH=./src python src/main.py --verbose
@@ -100,12 +108,22 @@ PYTHONPATH=./src python src/main.py --verbose
 - `--no-llm` or `--heuristic` - Use rule-based AI (no API costs)
 - `--players=N` - Number of players (2-4, default: 4)
 - `--max-turns=N` - Maximum full turns before ending (default: 10)
+- `--aggression=LEVEL` - Combat aggression level (default: balanced)
+  - **`aggressive`**: Attack with ALL creatures every turn (maximum pressure)
+  - **`balanced`**: Attack with power 2+ or when at ≤30 life (default)
+  - **`conservative`**: Only attack with power 3+ or when desperate (≤20 life)
 - `--help` or `-h` - Display help message with all options
+
+**Aggression Levels**: Control how aggressively the AI attacks in combat:
+- 🔴 **Aggressive**: All-out attacks every turn. Faster games, higher risk. Best for eliminating opponents quickly.
+- ⚖️ **Balanced**: Strategic attacks with decent creatures or when behind. Good mix of offense and defense.
+- 🛡️ **Conservative**: Defensive play, only attack with strong creatures. Hold back blockers for protection.
 
 **Heuristic Mode**: Use `--no-llm` or `--heuristic` to run games without making LLM API calls. This uses an **enhanced rule-based AI** that demonstrates the agentic architecture:
 - ✅ Uses the same tool-calling pattern as the LLM
 - ✅ Queries game state, analyzes threats, checks stack
 - ✅ Makes strategic decisions (ramp, removal, combat)
+- ✅ Respects aggression level settings
 - ✅ Shows the architecture works without LLM dependency
 - 💰 **Perfect for**: Testing engine, rapid iteration, demos, no API costs
 

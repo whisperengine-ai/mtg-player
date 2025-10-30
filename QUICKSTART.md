@@ -53,11 +53,18 @@ python run.py --players=2 --verbose           # 2-player game
 python run.py --max-turns=5 --verbose         # Short 5-turn game
 python run.py --players=2 --max-turns=3       # 2-player, 3-turn game
 
+# Aggression levels (control combat strategy)
+python run.py --aggression=aggressive --max-turns=50 --verbose   # Attack with ALL creatures
+python run.py --aggression=balanced --verbose                    # Balanced attacks (default)
+python run.py --aggression=conservative --verbose                # Defensive play
+
 # Heuristic mode (no LLM calls - free, fast testing)
 python run.py --no-llm --verbose
+python run.py --no-llm --aggression=aggressive --verbose  # Aggressive heuristic AI
 
 # Combine options
 python run.py --players=2 --max-turns=5 --no-llm --verbose
+python run.py --aggression=aggressive --max-turns=100 --verbose
 
 # Alternative entry (without run.py)
 PYTHONPATH=./src python src/main.py --verbose
@@ -68,13 +75,20 @@ PYTHONPATH=./src python src/main.py --verbose
 - `--no-llm` / `--heuristic` - Use rule-based AI (no API costs)
 - `--players=N` - Number of players (2-4, default: 4)
 - `--max-turns=N` - Maximum full turns (default: 10)
+- `--aggression=LEVEL` - Combat aggression: `aggressive`, `balanced` (default), or `conservative`
 - `--help` / `-h` - Show help message
+
+**Aggression Levels:**
+- 🔴 **aggressive**: Attack with ALL creatures (fast, risky)
+- ⚖️ **balanced**: Attack with power 2+ (strategic, default)
+- 🛡️ **conservative**: Only attack with power 3+ (defensive)
 
 That's it! The AI will play a game using LLM reasoning.
 
 **💡 Tip**: Use `--no-llm` flag to test without making API calls. This runs an **enhanced rule-based AI** that:
 - Uses the same tool-calling architecture as the LLM version
 - Analyzes game state, evaluates threats, makes strategic decisions
+- Respects aggression level settings for combat strategy
 - Demonstrates the agentic design pattern without LLM dependency
 - Perfect for rapid testing, demos, and understanding the architecture
 

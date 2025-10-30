@@ -130,7 +130,7 @@ def setup_game(num_players=4, verbose=True, archetypes=None):
     return game_state, rules_engine
 
 
-def play_game(game_state, rules_engine, max_full_turns=10, verbose=True, use_llm=True):
+def play_game(game_state, rules_engine, max_full_turns=10, verbose=True, use_llm=True, aggression="balanced"):
     """Play a game of Commander with simple auto-progression through phases.
 
     We progress the game by ensuring each loop iteration advances at least one
@@ -175,7 +175,8 @@ def play_game(game_state, rules_engine, max_full_turns=10, verbose=True, use_llm
         rules_engine=rules_engine, 
         verbose=verbose, 
         llm_logger=llm_logger,
-        use_llm=use_llm
+        use_llm=use_llm,
+        aggression=aggression
     ) for p in game_state.players}
 
     # Drive the game by steps, but cap by full-turns to avoid infinite loops
@@ -303,6 +304,15 @@ def main():
     verbose = "--verbose" in sys.argv or "-v" in sys.argv
     no_llm = "--no-llm" in sys.argv or "--heuristic" in sys.argv
     
+    # Support aggression level
+    aggression = "balanced"  # Default
+    for arg in sys.argv:
+        if arg.startswith("--aggression="):
+            aggression = arg.split("=")[1].lower()
+            if aggression not in ["conservative", "balanced", "aggressive"]:
+                print(f"⚠️  Invalid aggression level '{aggression}', using 'balanced'")
+                aggression = "balanced"
+    
     # Support custom player count
     num_players = 4  # Default to 4-player Commander
     for arg in sys.argv:
@@ -329,15 +339,21 @@ def main():
 Usage: python run.py [OPTIONS]
 
 Options:
-  --verbose, -v          Show detailed turn-by-turn output (logs always saved to files)
-  --no-llm, --heuristic  Use rule-based AI instead of LLM (no API costs)
-  --players=N            Number of players (2-4, default: 4)
-  --max-turns=N          Maximum number of full turns before ending (default: 10)
-  --help, -h             Show this help message
+  --verbose, -v             Show detailed turn-by-turn output (logs always saved to files)
+  --no-llm, --heuristic     Use rule-based AI instead of LLM (no API costs)
+  --players=N               Number of players (2-4, default: 4)
+  --max-turns=N             Maximum number of full turns before ending (default: 10)
+  --aggression=LEVEL        Combat aggression level (default: balanced)
+                            conservative: Only attack with power 3+ or when desperate
+                            balanced: Attack with power 2+ or when at 30 life or below
+                            aggressive: Attack with ALL creatures every turn
+  --help, -h                Show this help message
 
 Examples:
-  python run.py                           # 4 players, 10 turns, quiet mode
+  python run.py                           # 4 players, 10 turns, balanced aggression
   python run.py --verbose                 # Show output to console
+  python run.py --no-llm --aggressive     # Heuristic AI with aggressive attacks
+  python run.py --max-turns=50            # Longer game (more likely to see a winner)
   python run.py --players=2 --verbose     # 2-player game with output
   python run.py --no-llm --verbose        # Heuristic mode (no API costs)
   python run.py --max-turns=5 --verbose   # Short 5-turn game
@@ -348,7 +364,7 @@ For more information, see README.md and QUICKSTART.md
     
     # Set up and play game
     game_state, rules_engine = setup_game(num_players=num_players, verbose=verbose)
-    play_game(game_state, rules_engine, max_full_turns=max_turns, verbose=verbose, use_llm=not no_llm)
+    play_game(game_state, rules_engine, max_full_turns=max_turns, verbose=verbose, use_llm=not no_llm, aggression=aggression)
     
     print("\n✨ Thanks for playing! ✨\n")
 

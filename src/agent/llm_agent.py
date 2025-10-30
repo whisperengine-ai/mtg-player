@@ -39,7 +39,8 @@ class MTGAgent:
         llm_client: Any = None,
         verbose: bool = False,
         llm_logger: Any = None,
-        use_llm: bool = True
+        use_llm: bool = True,
+        aggression: str = "balanced"
     ):
         """
         Initialize the agent.
@@ -51,12 +52,22 @@ class MTGAgent:
             verbose: Whether to print reasoning
             llm_logger: LLM logger for recording prompts/responses
             use_llm: Whether to use LLM for decisions (if False, uses rule-based heuristics)
+            aggression: Combat aggression level - "conservative", "balanced", or "aggressive"
+                       conservative: Only attack with power 3+ or when behind
+                       balanced: Attack with power 2+ or when at 30 life or below
+                       aggressive: Attack with all creatures every turn
         """
         self.game_state = game_state
         self.rules_engine = rules_engine
         self.verbose = verbose
         self.llm_logger = llm_logger
         self.use_llm = use_llm
+        self.aggression = aggression.lower()
+        
+        # Validate aggression level
+        if self.aggression not in ["conservative", "balanced", "aggressive"]:
+            print(f"⚠️  Warning: Invalid aggression '{aggression}', defaulting to 'balanced'")
+            self.aggression = "balanced"
         
         # Initialize LLM client if not provided (and if we're using LLM)
         if llm_client is None and use_llm:
@@ -518,12 +529,23 @@ class MTGAgent:
         step = self.game_state.current_step.value
         phase = self.game_state.current_phase.value
         
+        # Add aggression guidance to the prompt
+        aggression_guidance = {
+            "aggressive": "\n**AGGRESSION LEVEL: AGGRESSIVE** - Attack with ALL creatures every turn. Maximum pressure!",
+            "balanced": "\n**AGGRESSION LEVEL: BALANCED** - Attack when advantageous (power 2+) or when behind on life.",
+            "conservative": "\n**AGGRESSION LEVEL: CONSERVATIVE** - Only attack with strong creatures (power 3+) or when desperate."
+        }
+        
+        base_prompt = ""
         if step in ["declare_attackers", "declare_blockers"]:
-            return COMBAT_PROMPT.format(step=step.upper())
+            base_prompt = COMBAT_PROMPT.format(step=step.upper())
         elif step == "main":
-            return MAIN_PHASE_PROMPT
+            base_prompt = MAIN_PHASE_PROMPT
         else:
-            return DECISION_PROMPT.format(phase=phase, step=step)
+            base_prompt = DECISION_PROMPT.format(phase=phase, step=step)
+        
+        # Append aggression guidance
+        return base_prompt + aggression_guidance.get(self.aggression, "")
     
     def take_turn_action(self) -> bool:
         """
@@ -724,27 +746,41 @@ class MTGAgent:
                 self._execute_action(pass_action)
             return {"type": "pass", "reasoning": "No creatures available to attack"}
         
-        # Simple but effective strategy: attack with creatures that have good power
-        # and avoid attacking if defender has much bigger blockers
+        # Apply aggression strategy to determine which creatures should attack
         attackers_declared = []
         
         for action in attack_actions:
             attacker_power = action.get("power", 0)
             
-            # Attack if creature has decent power (2+) or if we're behind and need to apply pressure
-            should_attack = attacker_power >= 2 or active_player.life < 30
+            # Determine if we should attack based on aggression level
+            should_attack = False
+            
+            if self.aggression == "aggressive":
+                # Always attack with everything
+                should_attack = True
+            elif self.aggression == "balanced":
+                # Attack with power 2+ or when at/below 30 life
+                should_attack = attacker_power >= 2 or active_player.life <= 30
+            else:  # conservative
+                # Only attack with strong creatures (3+) or when desperate (20 life or below)
+                should_attack = attacker_power >= 3 or active_player.life <= 20
             
             if should_attack:
                 self._execute_action(action)
-                attackers_declared.append(action.get("card_name", "creature"))
+                attackers_declared.append(action.get("creature_name", "creature"))
         
         if attackers_declared:
             if self.verbose:
-                print(f"⚔️  Attacking with {len(attackers_declared)} creatures")
+                aggression_msg = {
+                    "aggressive": "ALL-OUT ATTACK",
+                    "balanced": "Attacking",
+                    "conservative": "Carefully attacking"
+                }
+                print(f"⚔️  {aggression_msg.get(self.aggression, 'Attacking')} with {len(attackers_declared)} creatures")
             return {
                 "type": "declare_attacker",
                 "count": len(attackers_declared),
-                "reasoning": f"Attacking with {len(attackers_declared)} creatures to apply pressure"
+                "reasoning": f"{self.aggression.capitalize()} strategy: attacking with {len(attackers_declared)} creatures"
             }
         else:
             # Decided not to attack - pass
