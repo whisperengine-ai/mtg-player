@@ -74,18 +74,33 @@ cp .env.example .env
 ### Run the Game
 
 ```bash
-python run.py                      # Default: 4 players, quiet mode
+# Basic commands
+python run.py                      # Default: 4 players, 10 turns, quiet mode
 python run.py --verbose            # With turn-by-turn output to console
+python run.py --help               # Show all available options
+
+# Customize game
 python run.py --players=2          # 2-player game
 python run.py --players=2 --verbose  # 2-player with console output
+python run.py --max-turns=5        # Short 5-turn game
 
 # Heuristic mode (no LLM calls - for testing without API costs)
 python run.py --no-llm --verbose   # Use rule-based AI instead of LLM
 python run.py --heuristic          # Alternative flag name
 
+# Combine options
+python run.py --players=2 --max-turns=3 --no-llm --verbose
+
 # Alternative entry (without run.py)
 PYTHONPATH=./src python src/main.py --verbose
 ```
+
+**Available Options:**
+- `--verbose` or `-v` - Show detailed turn-by-turn output to console
+- `--no-llm` or `--heuristic` - Use rule-based AI (no API costs)
+- `--players=N` - Number of players (2-4, default: 4)
+- `--max-turns=N` - Maximum full turns before ending (default: 10)
+- `--help` or `-h` - Display help message with all options
 
 **Heuristic Mode**: Use `--no-llm` or `--heuristic` to run games without making LLM API calls. This uses an **enhanced rule-based AI** that demonstrates the agentic architecture:
 - ✅ Uses the same tool-calling pattern as the LLM
@@ -190,10 +205,10 @@ This ensures the AI can never make illegal moves or hallucinate game state.
 ## 🎮 Current Status
 
 - Phase 4 core complete (stack and instant-speed interactions)
-- 151-card Commander staples database
+- 152-card Commander staples database
 - Archetype-based deck builder: ramp, control, midrange
 - 4-player Commander setup with 40 life and commander zone
-- 38 tests passing (pytest)
+- 25 tests passing (pytest)
 - Type checks clean (mypy)
 
 ## 🧪 Testing
@@ -207,7 +222,7 @@ pytest --cov=src tests/
 ## ✅ Type Checking
 
 ```bash
-python -m mymy --config-file mypy.ini src
+python -m mypy --config-file mypy.ini src
 ```
 
 ## 🧰 Utilities

@@ -301,9 +301,42 @@ def main():
             except ValueError:
                 pass
     
+    # Support custom max turns
+    max_turns = 10  # Default to 10 full turns
+    for arg in sys.argv:
+        if arg.startswith("--max-turns="):
+            try:
+                max_turns = int(arg.split("=")[1])
+                max_turns = max(1, max_turns)  # At least 1 turn
+            except ValueError:
+                pass
+    
+    # Show help if requested
+    if "--help" in sys.argv or "-h" in sys.argv:
+        print("""
+Usage: python run.py [OPTIONS]
+
+Options:
+  --verbose, -v          Show detailed turn-by-turn output (logs always saved to files)
+  --no-llm, --heuristic  Use rule-based AI instead of LLM (no API costs)
+  --players=N            Number of players (2-4, default: 4)
+  --max-turns=N          Maximum number of full turns before ending (default: 10)
+  --help, -h             Show this help message
+
+Examples:
+  python run.py                           # 4 players, 10 turns, quiet mode
+  python run.py --verbose                 # Show output to console
+  python run.py --players=2 --verbose     # 2-player game with output
+  python run.py --no-llm --verbose        # Heuristic mode (no API costs)
+  python run.py --max-turns=5 --verbose   # Short 5-turn game
+
+For more information, see README.md and QUICKSTART.md
+        """)
+        return
+    
     # Set up and play game
     game_state, rules_engine = setup_game(num_players=num_players, verbose=verbose)
-    play_game(game_state, rules_engine, max_full_turns=10, verbose=verbose, use_llm=not no_llm)
+    play_game(game_state, rules_engine, max_full_turns=max_turns, verbose=verbose, use_llm=not no_llm)
     
     print("\n✨ Thanks for playing! ✨\n")
 

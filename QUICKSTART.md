@@ -39,21 +39,36 @@ cp .env.example .env
 ## 3. Run the Game
 
 ```bash
-# Run with console output (recommended)
+# View all options
+python run.py --help
+
+# Run with console output (recommended for learning)
 python run.py --verbose
 
 # Quiet mode (logs to files only)
 python run.py
 
-# 2-player game with output
-python run.py --players=2 --verbose
+# Customize your game
+python run.py --players=2 --verbose           # 2-player game
+python run.py --max-turns=5 --verbose         # Short 5-turn game
+python run.py --players=2 --max-turns=3       # 2-player, 3-turn game
 
 # Heuristic mode (no LLM calls - free, fast testing)
 python run.py --no-llm --verbose
 
+# Combine options
+python run.py --players=2 --max-turns=5 --no-llm --verbose
+
 # Alternative entry (without run.py)
 PYTHONPATH=./src python src/main.py --verbose
 ```
+
+**Available Options:**
+- `--verbose` / `-v` - Show detailed output to console (logs always saved to files)
+- `--no-llm` / `--heuristic` - Use rule-based AI (no API costs)
+- `--players=N` - Number of players (2-4, default: 4)
+- `--max-turns=N` - Maximum full turns (default: 10)
+- `--help` / `-h` - Show help message
 
 That's it! The AI will play a game using LLM reasoning.
 
