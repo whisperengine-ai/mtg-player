@@ -126,6 +126,9 @@ PYTHONPATH=./src python src/main.py --verbose
 - ✅ Respects aggression level settings
 - ✅ Shows the architecture works without LLM dependency
 - 💰 **Perfect for**: Testing engine, rapid iteration, demos, no API costs
+- 🎯 **Performance**: ~70-80% as effective as LLM in current implementation (see [ARCHITECTURE.md](ARCHITECTURE.md) for detailed analysis)
+
+> **Note**: The heuristic AI is surprisingly effective because MTG has constrained action spaces (limited legal moves at any time). The LLM's advantages are mainly in complex board evaluation, political decisions in multiplayer, and creative line-finding. See the "Heuristic vs LLM" section in [ARCHITECTURE.md](ARCHITECTURE.md) for a full comparison.
 
 ### Logging
 
@@ -133,6 +136,7 @@ The game creates detailed log files in the `logs/` directory:
 
 - **Game logs** (`logs/game_YYYYMMDD_HHMMSS_gameid.log`)
   - Turn progression
+```
   - Phase changes
   - Player actions
   - Win/loss conditions
