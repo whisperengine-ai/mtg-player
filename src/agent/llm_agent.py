@@ -591,34 +591,34 @@ class MTGAgent:
         if self.verbose:
             print(f"📋 Found {len(actions)} legal actions in {phase}/{step}")
         
-        # Step 5: Make intelligent decisions based on phase
+        # Step 5: Make intelligent decisions based on phase/step
         decision = None
         
+        # Only make decisions during interactive steps
         if step == "main":
             decision = self._decide_main_phase(actions, active_player, threats)
         elif step == "declare_attackers":
             decision = self._decide_attackers(actions, active_player, threats)
         elif step == "declare_blockers":
             decision = self._decide_blockers(actions, active_player, threats)
-        elif phase == "beginning" or phase == "ending":
-            # Check for instant-speed responses
-            can_respond_tool = self.tools["can_respond"]
-            respond_result = can_respond_tool.execute()
+        else:
+            # For non-interactive steps (untap, upkeep, draw, end step, cleanup, etc.)
+            # Check if we can respond with instants
+            can_respond_tool = self.tools.get("can_respond")
+            if can_respond_tool:
+                respond_result = can_respond_tool.execute()
+                
+                if respond_result.get("can_respond") and respond_result.get("available_instants"):
+                    decision = self._decide_instant_response(actions, respond_result)
             
-            if respond_result.get("can_respond") and respond_result.get("available_instants"):
-                decision = self._decide_instant_response(actions, respond_result)
-            else:
-                # Just pass through non-interactive phases
+            # If no instant response or can't respond, just pass to advance
+            if not decision:
                 pass_action = next((a for a in actions if a["type"] == "pass"), None)
                 if pass_action:
                     self._execute_action(pass_action)
-                    decision = {"type": "pass", "reasoning": f"Passing through {phase} phase"}
-        else:
-            # Default: pass
-            pass_action = next((a for a in actions if a["type"] == "pass"), None)
-            if pass_action:
-                self._execute_action(pass_action)
-                decision = {"type": "pass", "reasoning": f"No actions in {phase}/{step}"}
+                    if self.verbose:
+                        print(f"⏭️  Passing priority in {phase}/{step}")
+                    decision = {"type": "pass", "reasoning": f"Passing through {phase}/{step}"}
         
         return decision
     

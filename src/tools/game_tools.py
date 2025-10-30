@@ -102,6 +102,10 @@ class GetLegalActionsTool(Tool):
                     "card_id": spell.instance_id,
                     "card_name": spell.card.name,
                     "cost": str(spell.card.mana_cost),
+                    "card_types": [ct.value for ct in spell.card.card_types],  # Include card types for AI
+                    "oracle_text": spell.card.oracle_text or "",  # Include text for AI analysis
+                    "power": spell.card.power,  # Include P/T for creatures
+                    "toughness": spell.card.toughness,
                     "description": f"Cast {spell.card.name} (cost: {spell.card.mana_cost})"
                 })
             
@@ -127,7 +131,9 @@ class GetLegalActionsTool(Tool):
                             "creature_name": creature.card.name,
                             "target_id": opponent.id,
                             "target_name": opponent.name,
-                            "description": f"Attack {opponent.name} with {creature.card.name}"
+                            "power": creature.card.power or 0,  # Include for heuristic
+                            "toughness": creature.card.toughness or 0,
+                            "description": f"Attack {opponent.name} with {creature.card.name} ({creature.card.power}/{creature.card.toughness})"
                         })
         
         # Declare blockers
@@ -145,9 +151,13 @@ class GetLegalActionsTool(Tool):
                         "type": "declare_blocker",
                         "blocker_id": blocker.instance_id,
                         "blocker_name": blocker.card.name,
+                        "blocker_power": blocker.card.power or 0,  # Include for heuristic
+                        "blocker_toughness": blocker.card.toughness or 0,
                         "attacker_id": attacker.instance_id,
                         "attacker_name": attacker.card.name,
-                        "description": f"Block {attacker.card.name} with {blocker.card.name}"
+                        "attacker_power": attacker.card.power or 0,
+                        "attacker_toughness": attacker.card.toughness or 0,
+                        "description": f"Block {attacker.card.name} ({attacker.card.power}/{attacker.card.toughness}) with {blocker.card.name} ({blocker.card.power}/{blocker.card.toughness})"
                     })
         
         return {
