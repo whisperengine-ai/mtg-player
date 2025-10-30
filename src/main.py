@@ -149,6 +149,9 @@ def play_game(game_state, rules_engine, max_full_turns=10, verbose=True, use_llm
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     game_id = f"{timestamp}_{game_state.game_id[:8]}"
     game_logger, llm_logger, heuristic_logger = setup_loggers(game_id)
+    # Attach game logger to rules engine for internal events (draws, life changes)
+    if hasattr(rules_engine, "set_game_logger"):
+        rules_engine.set_game_logger(game_logger)
     
     # Log game setup
     game_logger.log_game_state({
@@ -334,6 +337,21 @@ def main():
                 max_turns = max(1, max_turns)  # At least 1 turn
             except ValueError:
                 pass
+
+    # Optional RNG seed for reproducible runs
+    seed = None
+    for arg in sys.argv:
+        if arg.startswith("--seed="):
+            try:
+                seed = int(arg.split("=")[1])
+            except ValueError:
+                seed = None
+    if seed is not None:
+        try:
+            random.seed(seed)
+            print(f"🔁 RNG seeded with {seed}")
+        except Exception:
+            print("⚠️  Failed to set RNG seed; continuing without seeding.")
     
     # Show help if requested
     if "--help" in sys.argv or "-h" in sys.argv:
@@ -349,6 +367,7 @@ Options:
                             conservative: Only attack with power 3+ or when desperate
                             balanced: Attack with power 2+ or when at 30 life or below
                             aggressive: Attack with ALL creatures every turn
+    --seed=N                  Seed Python RNG for reproducible shuffles and decisions
   --help, -h                Show this help message
 
 Examples:

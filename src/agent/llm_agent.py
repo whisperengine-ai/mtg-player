@@ -706,14 +706,21 @@ class MTGAgent:
         # Log heuristic context to separate log
         if getattr(self, 'heuristic_logger', None):
             try:
+                pname = active_player.name if active_player else "Unknown"
                 self.heuristic_logger.log_context(
-                    active_player.name,
+                    pname,
                     self.game_state.turn_number,
                     phase,
                     step,
                     len(threats),
                     len(actions)
                 )
+            except Exception:
+                pass
+            # Also log considered actions (top-N) for transparency
+            try:
+                ranked = self._rank_actions(actions, active_player, threats, position_score)
+                self.heuristic_logger.log_considered_actions(ranked, limit=3)
             except Exception:
                 pass
         
@@ -747,6 +754,99 @@ class MTGAgent:
                     decision = {"type": "pass", "reasoning": f"Passing through {phase}/{step}"}
         
         return decision
+
+    def _rank_actions(self, actions: list, active_player, threats: list, position_score: float | None) -> list:
+        """Produce a scored list of candidate actions with brief reasons.
+
+        This doesn't change policy; it's for logging/observability only.
+        """
+        ranked = []
+        has_threats = bool(threats)
+
+        # Adjust local aggression based on evaluated position if available
+        local_aggr = self.aggression
+        if position_score is not None:
+            if position_score >= 0.6:
+                local_aggr = "aggressive"
+            elif position_score <= 0.4:
+                local_aggr = "conservative"
+            else:
+                local_aggr = "balanced"
+
+        for a in actions:
+            a_type = a.get("type")
+            card_name = a.get("card_name") or a.get("card")
+            score = 0.1
+            reason = ""
+
+            if a_type == "play_land":
+                # Highly valuable if not yet played a land
+                if not active_player.has_played_land_this_turn:
+                    score = 0.85
+                    reason = "Ramping: land drop available"
+                else:
+                    score = 0.2
+                    reason = "Already played land this turn"
+            elif a_type == "cast_spell":
+                # Prefer removal when threats exist
+                name = (card_name or "").lower()
+                text = (a.get("oracle_text") or "").lower()
+                is_removal = any(k in name or k in text for k in ["destroy", "exile", "counter", "bounce", "removal"]) 
+                is_creature = ("creature" in a.get("card_types", [])) or ("creature" in str(a.get("card_types", [])))
+                affordable = self._can_afford(a, active_player)
+                if is_removal and has_threats and affordable:
+                    score = 0.9
+                    reason = "Answering threats with removal"
+                elif is_creature and affordable:
+                    score = 0.7
+                    reason = "Board development: cast creature"
+                elif affordable:
+                    score = 0.6
+                    reason = "Value spell"
+                else:
+                    score = 0.2
+                    reason = "Cannot afford now"
+            elif a_type == "declare_attacker":
+                power = a.get("power", 0)
+                if local_aggr == "aggressive":
+                    score = 0.75 + min(0.2, power * 0.03)
+                    reason = "Aggressive stance: favor attacking"
+                elif local_aggr == "balanced":
+                    score = 0.6 + min(0.2, max(0, (power - 2) * 0.04))
+                    reason = "Balanced stance: attack if power ≥ 2"
+                else:
+                    score = 0.45 + min(0.2, max(0, (power - 3) * 0.05))
+                    reason = "Conservative stance: attack with strong creatures"
+            elif a_type == "declare_blocker":
+                a_power = a.get("attacker_power", 0)
+                b_tough = a.get("blocker_toughness", 0)
+                if b_tough >= a_power or active_player.life <= 15:
+                    score = 0.7
+                    reason = "Profitable or necessary block"
+                else:
+                    score = 0.3
+                    reason = "Unfavorable block"
+            elif a_type == "pass":
+                # Default low, but not zero
+                score = 0.15
+                if not has_threats and local_aggr != "aggressive":
+                    reason = "No urgent threats; holding"
+                else:
+                    reason = "Passing as fallback"
+
+            ranked.append({
+                "type": a_type,
+                "card": card_name,
+                "score": float(score),
+                "reason": reason
+            })
+
+        # Sort by score desc for logging only
+        try:
+            ranked.sort(key=lambda x: x.get("score", 0), reverse=True)
+        except Exception:
+            pass
+        return ranked
     
     def _decide_main_phase(self, actions: list, active_player, threats: list, position_score: float | None = None) -> Dict[str, Any]:
         """Decide what to do during main phase - demonstrates strategic thinking."""

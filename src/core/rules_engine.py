@@ -2,7 +2,7 @@
 Core rules engine for MTG.
 Handles game logic, turn structure, and action validation.
 """
-from typing import Optional, List
+from typing import Optional, List, Any
 import uuid
 from core.game_state import GameState, Phase, Step
 from core.player import Player
@@ -13,10 +13,16 @@ from core.stack import Stack, StackObject, StackObjectType
 class RulesEngine:
     """Manages game rules and state transitions."""
     
-    def __init__(self, game_state: GameState):
+    def __init__(self, game_state: GameState, game_logger: Optional[Any] = None):
         self.game_state = game_state
         self.stack = Stack()  # Create stack manager
         self._pending_cards: dict = {}  # Store cards pending resolution
+        # Optional game logger (duck-typed to avoid hard dependency)
+        self.game_logger: Optional[Any] = game_logger
+
+    def set_game_logger(self, game_logger: Any) -> None:
+        """Attach a game logger after initialization."""
+        self.game_logger = game_logger
 
     def start_game(self):
         """Initialize the game."""
@@ -129,6 +135,9 @@ class RulesEngine:
     def draw_step(self, player: Player):
         """Draw a card."""
         player.draw_card()
+        # Log draw event
+        if self.game_logger and hasattr(self.game_logger, "log_draw"):
+            self.game_logger.log_draw(player.name, len(player.hand))
 
     def cleanup_step(self, player: Player):
         """Cleanup step actions."""
@@ -299,6 +308,11 @@ class RulesEngine:
         
         # Store card instance for resolution
         self._pending_cards[card_instance.instance_id] = card_instance
+
+        # Log stack push
+        if self.game_logger and hasattr(self.game_logger, "log_stack_push"):
+            controller_name = player.name
+            self.game_logger.log_stack_push(controller_name, card_instance.card.name, stack_obj.targets)
         
         # Priority returns to active player
         self.stack.reset_priority_after_resolution(self.game_state.active_player_id)
@@ -333,9 +347,15 @@ class RulesEngine:
                 # Creature goes to battlefield
                 card_instance.summoning_sick = True
                 controller.battlefield.append(card_instance)
+                # Log resolution outcome
+                if self.game_logger and hasattr(self.game_logger, "log_stack_resolve"):
+                    self.game_logger.log_stack_resolve(controller.name, card_instance.card.name, "to battlefield")
             else:
                 # Other spells resolve and go to graveyard
                 controller.graveyard.append(card_instance)
+                # Log resolution outcome
+                if self.game_logger and hasattr(self.game_logger, "log_stack_resolve"):
+                    self.game_logger.log_stack_resolve(controller.name, card_instance.card.name, "to graveyard")
             
             # Clean up pending cards
             self._pending_cards.pop(stack_obj.card_instance_id, None)
@@ -350,20 +370,34 @@ class RulesEngine:
         Current priority player passes priority.
         Returns True if stack should resolve (all players passed).
         """
+        # Log current priority player passing
+        curr_prio_id = self.stack.get_priority_player()
+        if curr_prio_id and self.game_logger and hasattr(self.game_logger, "log_priority_pass"):
+            prio_player = self.game_state.get_player(curr_prio_id)
+            if prio_player:
+                self.game_logger.log_priority_pass(prio_player.name)
         all_passed = self.stack.pass_priority()
         
         if all_passed and not self.stack.is_empty():
             # All players passed with objects on stack - resolve top
+            if self.game_logger and hasattr(self.game_logger, "log_all_passed"):
+                self.game_logger.log_all_passed("resolve_top")
             self.resolve_top_of_stack()
             return True
         elif all_passed and self.stack.is_empty():
             # All passed with empty stack - move to next phase/step
+            if self.game_logger and hasattr(self.game_logger, "log_all_passed"):
+                self.game_logger.log_all_passed("empty_stack")
             return True
         
         # Update priority player in game state
         priority_player_id = self.stack.get_priority_player()
         if priority_player_id:
             self.game_state.priority_player_id = priority_player_id
+            if self.game_logger and hasattr(self.game_logger, "log_priority_next"):
+                next_player = self.game_state.get_player(priority_player_id)
+                if next_player:
+                    self.game_logger.log_priority_next(next_player.name)
         
         return False
 
@@ -445,6 +479,10 @@ class RulesEngine:
                     target = opponents[0]
                     damage = attacker.current_power()
                     target.life -= damage
+                    # Log life loss event
+                    if self.game_logger and hasattr(self.game_logger, "log_life_change"):
+                        reason = f"combat damage from {attacker.card.name}"
+                        self.game_logger.log_life_change(target.name, -damage, target.life, reason)
                     
                     # Track commander damage
                     if attacker.card.is_commander:

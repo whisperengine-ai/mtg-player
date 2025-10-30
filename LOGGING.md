@@ -13,6 +13,12 @@ All logs are saved to the `logs/` directory with timestamped filenames:
 - Turn start announcements
 - Phase transitions
 - Player actions (play land, cast spell, attack, etc.)
+- Card draws per draw step
+- Life total changes from combat damage
+- Stack events:
+	- When a spell is put on the stack
+	- When the top of the stack resolves (with outcome)
+	- Priority pass chain (who passed, who gets priority next, all passed)
 - Game state snapshots
 - Win/loss conditions
 - Errors and forced phase advances
@@ -22,7 +28,16 @@ All logs are saved to the `logs/` directory with timestamped filenames:
 2025-10-30 05:42:57,553 - INFO - Game started: 963c7491-4a74-4dca-92b7-261293787425
 2025-10-30 05:42:57,571 - INFO - TURN 1 | Player 1 (Ramp) | beginning/untap
 2025-10-30 05:42:58,123 - INFO - PHASE CHANGE | beginning/untap → beginning/upkeep
+2025-10-30 05:42:58,456 - INFO - PHASE CHANGE | beginning/upkeep → beginning/draw
+2025-10-30 05:42:58,457 - INFO - DRAW | Player 1 (Ramp) | Hand: 8
 2025-10-30 05:42:59,456 - INFO - ACTION | Player 1 (Ramp) | play_land | Forest
+2025-10-30 05:43:00,101 - INFO - STACK | PUSH | Player 1 (Ramp) | Lightning Bolt | targets: Player 2 (Control)
+2025-10-30 05:43:00,102 - INFO - PRIORITY | pass | Player 1 (Ramp)
+2025-10-30 05:43:00,103 - INFO - PRIORITY | to | Player 2 (Control)
+2025-10-30 05:43:00,203 - INFO - PRIORITY | pass | Player 2 (Control)
+2025-10-30 05:43:00,203 - INFO - PRIORITY | all passed | action: resolve_top
+2025-10-30 05:43:00,204 - INFO - STACK | RESOLVE | Player 1 (Ramp) | Lightning Bolt | to graveyard
+2025-10-30 05:43:10,012 - INFO - LIFE | Player 2 (Control) | -3 -> 37 | combat damage from Commander Bear
 2025-10-30 05:43:15,789 - INFO - GAME END | Winner: Player 1 (Ramp) | Reason: all opponents eliminated
 ```
 
