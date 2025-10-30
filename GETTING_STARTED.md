@@ -427,13 +427,37 @@ You've gone from basic LLM prompting to understanding agentic AI architecture!
 **Next time someone asks "How do I make an AI that can DO things?"** - you know the answer: **Tools!**
 
 Happy coding! 🚀
+
+---
+
+## ✅ Bonus Challenge: Add Your Own Card
+
+### Step 1: Add card to database
+
+```python
+# In src/data/cards.py, add to CARD_DATABASE
+Card(
+    id="my_awesome_card",
+    name="My Awesome Card",
+    mana_cost=ManaCost(generic=3, green=1),
+    card_types=[CardType.CREATURE],
+    colors=[Color.GREEN],
+    power=5,
+    toughness=5,
+    oracle_text="When this enters, draw a card"
+)
+```
+
+### Step 2: Test it
+
+```bash
 python run.py --no-llm --verbose
 
 # Look for your card in the output
 # It should appear in hand or on battlefield
 ```
 
-#### Step 4: Verify
+#### Step 3: Verify
 
 - [ ] Game runs without errors
 - [ ] Your card appears in the deck
