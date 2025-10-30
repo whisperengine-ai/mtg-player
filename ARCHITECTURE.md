@@ -1687,79 +1687,105 @@ Execution Layer (Rules)    → Validation, state management
 - ✅ Configurable aggression levels
 - ✅ Stack and instant-speed interactions
 
-#### **Phase 1.5** (Next 2-3 weeks): Quick Wins 🎯
-**Goal**: Strengthen foundation before adding complex algorithms
+#### **Phase 1.5** (Complete): Logging & Observability 🎯
+**Status**: Complete ✅
+**Goal**: Comprehensive logging for debugging and transparency
 
-**Week 1: Evaluation & Measurement**
-- [ ] **Position Evaluation Function** (1-2 hours)
-  - Score game states 0.0-1.0 (losing to winning)
-  - Consider: life, board state, mana, card advantage
+**Completed Items:**
+- ✅ **Position Evaluation Function** 
+  - Implemented `EvaluatePositionTool` with weighted heuristics
+  - Scores game states 0.0-1.0 (losing to winning)
+  - Considers: life, board state, mana, card advantage
+  - Integrated into both LLM and heuristic flows
   - Foundation for MCTS and metrics
   
-- [ ] **Game Statistics Logging** (1 hour)
-  - Track turns, damage, spells cast, creatures deployed
-  - Enable A/B testing heuristic vs LLM
-  - Export data for analysis
+- ✅ **Game Event Logging** 
+  - Draw step logging via `GameLogger.log_draw()`
+  - Life change logging via `GameLogger.log_life_change()`
+  - Stack push/resolve logging via `GameLogger.log_stack_push/resolve()`
+  - Priority pass chain logging via `GameLogger.log_priority_pass/next/all_passed()`
+  - Action-level logging (play_land, cast_spell, attack, block, pass)
+  - Turn summary logging with per-player end-of-turn stats
+  - Configurable via `--no-turn-summaries` CLI flag (default: enabled)
   
+- ✅ **Reproducible Runs**
+  - Added `--seed=N` CLI flag for deterministic shuffles and decisions
+  - Enables reliable testing and debugging
+  - Validated with seeded heuristic games
+  
+- ✅ **LLM Console Summaries**
+  - Added `--llm-console` flag for one-line console output per LLM call
+  - Format: `🤖 LLM #N: {model} | tools: {count} | {finish_reason}`
+  - Helps monitor LLM activity without opening log files
+  - Integrates with `LLMLogger.log_llm_response()`
+  
+- ✅ **Heuristic Considered Actions Logging**
+  - Added `HeuristicLogger.log_considered_actions()` 
+  - Logs top N candidate actions with scores and brief reasons
+  - Integrated into `MTGAgent._rank_actions()` 
+  - Provides transparency into heuristic decision-making
+  
+- ✅ **Documentation**
+  - Updated `LOGGING.md` with comprehensive logging architecture
+  - Documented all log entry types with examples
+  - Provided usage tips for analyzing logs
+
+**Expected Outcomes - All Met**:
+- ✅ Comprehensive game event logging (draw, life, stack, priority, actions)
+- ✅ Per-turn summaries for quick status checks
+- ✅ Position evaluation foundation (used by both LLM and heuristic)
+- ✅ Reproducible games via seeding
+- ✅ LLM console monitoring
+- ✅ Heuristic decision transparency
+- ✅ Full test coverage (all tests passing)
+
+#### **Phase 2** (Next): Enhanced Strategic Tools 🎯
+**Goal**: Deepen strategic context for both LLM and algorithms
+
+**Planned Items:**
 - [ ] **"Can I Win?" Tool** (2-3 hours)
   - Calculate lethal damage potential
   - Check creature damage + burn spells
   - Enable aggressive closing strategies
-
-**Week 2: Quality & Stability**
-- [ ] **Regression Test Suite** (2 hours)
-  - Test lethal detection
-  - Test threat prioritization
-  - Test combat decisions
-  - Test removal targeting
   
-- [ ] **Improve Heuristic Combat** (2-3 hours)
-  - Better attack/block calculations
-  - Risk assessment (likely to die?)
-  - Value trades (profitable exchanges)
-  - Evasion recognition (flying, unblockable)
-
-**Week 3: Strategic Depth**
 - [ ] **Strategy Recommendation Tool** (2-3 hours)
   - Analyze game phase (early/mid/late)
   - Recommend strategy (ramp/defend/attack/close)
   - Bridge tactics to strategy
   
-- [ ] **Simple Opponent Modeling** (3-4 hours)
+- [ ] **Opponent Modeling** (3-4 hours)
   - Track opponent deck archetype (aggro/control/combo)
   - Identify biggest threat
   - Political targeting in multiplayer
+  
+- [ ] **Regression Test Suite** (2 hours)
+  - Test lethal detection
+  - Test threat prioritization
+  - Test combat decisions
+  - Test removal targeting
 
-**Expected Outcomes**:
-- ✅ Objective position evaluation (foundation for all algorithms)
-- ✅ Measurable performance metrics (prove improvements)
-- ✅ Lethal detection (close games efficiently)
-- ✅ Smarter baseline (raise bar for LLM)
-- ✅ Political awareness (multiplayer strategy)
-- ✅ Test coverage (prevent regressions)
-
-#### **Phase 2** (1-2 months): Add MCTS for Combat
+#### **Phase 3** (2-3 months): Add MCTS for Combat
 **Goal**: Tactical excellence via simulation
 - [ ] MCTS node implementation
 - [ ] Position evaluation integration
 - [ ] Combat-specific rollouts
 - [ ] Benchmark vs heuristic
 
-#### **Phase 3** (2-4 months): Add Bayesian Opponent Modeling
+#### **Phase 4** (3-5 months): Add Bayesian Opponent Modeling
 **Goal**: Hidden information handling
 - [ ] Prior probability distributions
 - [ ] Belief updating from observations
 - [ ] Expected value calculations
 - [ ] Integration with strategy layer
 
-#### **Phase 4** (4-6 months): Neural Network Value Function
+#### **Phase 5** (5-7 months): Neural Network Value Function
 **Goal**: Replace heuristic evaluation with learned function
 - [ ] Collect game database
 - [ ] Train value network
 - [ ] Replace position_eval() with neural net
 - [ ] Measure improvement
 
-#### **Phase 5** (Long-term): Full Deep RL Self-Play
+#### **Phase 6** (Long-term): Full Deep RL Self-Play
 **Goal**: Discover novel strategies
 - [ ] AlphaZero-style training
 - [ ] Self-play infrastructure
