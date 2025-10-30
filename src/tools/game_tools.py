@@ -90,12 +90,24 @@ class GetLegalActionsTool(Tool):
                         "description": f"Play land: {land.card.name}"
                     })
             
-            # Can cast spells
-            available_mana = active_player.available_mana().total()
-            castable_spells = [
-                c for c in active_player.hand 
-                if not c.card.is_land() and c.card.cmc() <= available_mana
-            ]
+            # Can cast spells - check both total mana and color requirements
+            available_mana = active_player.available_mana()
+            castable_spells = []
+            for spell in active_player.hand:
+                if spell.card.is_land():
+                    continue
+                    
+                cost = spell.card.mana_cost
+                
+                # Check if we have enough colored mana
+                if (cost.white <= available_mana.white and
+                    cost.blue <= available_mana.blue and
+                    cost.black <= available_mana.black and
+                    cost.red <= available_mana.red and
+                    cost.green <= available_mana.green and
+                    cost.total() <= available_mana.total()):
+                    castable_spells.append(spell)
+            
             for spell in castable_spells:
                 actions.append({
                     "type": "cast_spell",

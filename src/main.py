@@ -214,7 +214,7 @@ def play_game(game_state, rules_engine, max_full_turns=10, verbose=True, use_llm
 
         # Get agent and let them take actions until phase changes or they pass
         agent = agents[active_player.id]
-        max_actions_per_phase = 20  # Prevent infinite loops
+        max_actions_per_phase = 10  # Prevent infinite loops (lowered from 20 for debugging)
         actions_taken = 0
         
         try:
