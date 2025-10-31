@@ -1555,8 +1555,8 @@ def create_ramp_deck(commander_card: Optional[Card] = None):
     deck.append(cards["fyndhorn_elves"])
     deck.append(cards["birds_of_paradise"])
     deck.append(cards["avacyns_pilgrim"])
-        deck.append(cards["farhaven_elf"])
-        deck.append(cards["ondu_giant"])
+    deck.append(cards["farhaven_elf"])
+    deck.append(cards["ondu_giant"])
     
     # Card Draw (8)
     deck.append(cards["harmonize"])
