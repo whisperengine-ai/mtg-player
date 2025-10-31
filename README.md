@@ -260,12 +260,30 @@ This ensures the AI can never make illegal moves or hallucinate game state.
 
 ## 🎮 Current Status
 
-- Phase 4 core complete (stack and instant-speed interactions)
-- 152-card Commander staples database
-- Archetype-based deck builder: ramp, control, midrange
-- 4-player Commander setup with 40 life and commander zone
-- 25 tests passing (pytest)
-- Type checks clean (mypy)
+**Phase 5a: Strategic Reasoning Enhancement** 🔥 IN PROGRESS
+
+### Latest Feature: Chain-of-Thought Enforcement ✨
+
+The LLM agent now enforces strategic thinking before making moves:
+- **Required Strategic Analysis**: Must call `evaluate_position`, `analyze_opponent`, and `recommend_strategy` before executing actions
+- **Configurable**: Set `COT_ENFORCEMENT=true` and `MIN_STRATEGIC_TOOLS=3` in `.env`
+- **Better Decisions**: Prevents "legal but dumb" moves by forcing analysis first
+- **73 Tests Passing**: Including new Chain-of-Thought enforcement tests
+
+### What's Working
+- Phase 4 core complete (stack and instant-speed interactions) ✅
+- 152-card Commander staples database ✅
+- Archetype-based deck builder: ramp, control, midrange ✅
+- 4-player Commander setup with 40 life and commander zone ✅
+- Chain-of-Thought enforcement for strategic decision-making ✅ NEW!
+- 73 tests passing (pytest) ✅
+- Type checks clean (mypy) ✅
+
+### Next Up (Phase 5a)
+- Multi-turn planning system
+- Memory & context between turns
+- Enhanced combat intelligence (political target selection)
+- Improved prompt engineering
 
 ## 🧪 Testing
 

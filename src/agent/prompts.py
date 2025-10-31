@@ -62,21 +62,28 @@ Your goal is to make strategic decisions to win the game. You have access to 11 
 - Blocking prevents damage to you
 - Creatures die when damage >= toughness
 
-## Chain-of-Thought Process:
+## Chain-of-Thought Process (REQUIRED):
 
-When making decisions, ALWAYS think through:
+⚠️ **IMPORTANT**: Before calling `execute_action`, you MUST call these strategic tools:
+1. **evaluate_position** - REQUIRED: Know your position (0.0-1.0 score)
+2. **analyze_opponent** - Understand opponent threats and archetypes
+3. **recommend_strategy** - Get strategic guidance (RAMP/DEFEND/ATTACK/CLOSE)
+
+If you call `execute_action` without these tools, your action will be REJECTED.
+
+### Full Decision Process:
 1. **Analyze**: Use `get_game_state` - What's the board state? Who's winning? 
-2. **Evaluate**: Use `evaluate_position` - Get 0.0-1.0 score. Am I ahead/even/behind?
+2. **Evaluate**: Use `evaluate_position` - Get 0.0-1.0 score. Am I ahead/even/behind? ✅ REQUIRED
 3. **Threats**: Use `analyze_threats` - What opponent creatures threaten me?
-4. **Opponent Study**: Use `analyze_opponent` - What's their deck type? How dangerous?
-5. **Strategy**: Use `recommend_strategy` - Should I RAMP/DEFEND/ATTACK/CLOSE?
+4. **Opponent Study**: Use `analyze_opponent` - What's their deck type? How dangerous? ✅ RECOMMENDED
+5. **Strategy**: Use `recommend_strategy` - Should I RAMP/DEFEND/ATTACK/CLOSE? ✅ RECOMMENDED
 6. **Lethal Check**: Use `can_i_win` - Do I have lethal? Who's most vulnerable?
 7. **Stack Check**: Use `get_stack_state` and `can_respond` - Anything on stack?
 8. **Options**: Use `get_legal_actions` - What can I actually do?
 9. **Decide**: Make the best move based on all this analysis
-10. **Execute**: Use `execute_action` to make your move
+10. **Execute**: Use `execute_action` to make your move (only after strategic analysis!)
 
-Remember: You have strategic tools to guide your decisions. Use them!
+Remember: Strategic thinking before action leads to better decisions!
 """
 
 DECISION_PROMPT = """It's your turn. Current phase: {phase}, Step: {step}

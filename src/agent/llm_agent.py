@@ -83,6 +83,11 @@ class MTGAgent:
         # Set up tools and prompts
         self.tools = self._setup_tools()
         self.messages: List[Dict[str, Any]] = [{"role": "system", "content": SYSTEM_PROMPT}]
+        
+        # Phase 5: Chain-of-Thought enforcement
+        self._strategic_tools_called: set = set()  # Track which strategic tools were called this decision
+        self._cot_enforcement_enabled = os.getenv("COT_ENFORCEMENT", "true").lower() in ("1", "true", "yes", "on")
+        self._min_strategic_tools = int(os.getenv("MIN_STRATEGIC_TOOLS", "3"))  # Minimum strategic tools before action
 
     def _setup_tools(self) -> Dict[str, Any]:
         """Instantiate and wire all tools used by the agent."""
@@ -259,6 +264,9 @@ class MTGAgent:
                 print("🎲 Using rule-based AI (no LLM)")
             return self._make_simple_decision()
         
+        # Phase 5: Reset strategic tool tracking for this decision
+        self._reset_strategic_tool_tracking()
+        
         # Reset conversation for this decision (keep only system prompt)
         self.messages = [self.messages[0]]
         
@@ -400,6 +408,28 @@ class MTGAgent:
                         if self.verbose:
                             print(f"🔧 Calling tool: {function_name}({list(function_args.keys())})")
                         
+                        # Phase 5: Track strategic tool calls
+                        self._record_strategic_tool_call(function_name)
+                        
+                        # Phase 5: Validate strategic tools were called before execute_action
+                        if function_name == "execute_action" and self._cot_enforcement_enabled:
+                            is_valid, error_msg = self._validate_strategic_tools_called()
+                            if not is_valid:
+                                # Block the action and return error
+                                if self.verbose:
+                                    print(f"🚫 Chain-of-Thought Enforcement: {error_msg}")
+                                tool_results.append({
+                                    "role": "tool",
+                                    "tool_call_id": tool_call.id,
+                                    "content": json.dumps({
+                                        "success": False,
+                                        "error": f"Chain-of-Thought requirement not met: {error_msg}",
+                                        "strategic_tools_called": list(self._strategic_tools_called),
+                                        "hint": "Call evaluate_position, analyze_opponent, and recommend_strategy first"
+                                    })
+                                })
+                                continue  # Skip this tool, don't execute
+                        
                         # Execute the tool
                         tool = self.tools.get(function_name)
                         if tool:
@@ -499,6 +529,53 @@ class MTGAgent:
         
         # Append aggression guidance
         return base_prompt + aggression_guidance.get(self.aggression, "")
+    
+    def _reset_strategic_tool_tracking(self):
+        """Reset the tracking for strategic tools at the start of each decision."""
+        self._strategic_tools_called = set()
+    
+    def _record_strategic_tool_call(self, tool_name: str):
+        """Record that a strategic tool was called."""
+        strategic_tools = {
+            "evaluate_position",
+            "analyze_opponent", 
+            "recommend_strategy",
+            "can_i_win",
+            "analyze_threats"
+        }
+        if tool_name in strategic_tools:
+            self._strategic_tools_called.add(tool_name)
+    
+    def _validate_strategic_tools_called(self) -> tuple[bool, str]:
+        """
+        Validate that sufficient strategic tools were called before executing an action.
+        Returns (is_valid, error_message).
+        """
+        if not self._cot_enforcement_enabled:
+            return (True, "")
+        
+        # Define required strategic tools (at least some subset must be called)
+        required_tools = {
+            "evaluate_position",  # Always need position awareness
+        }
+        
+        recommended_tools = {
+            "analyze_opponent",
+            "recommend_strategy",
+            "analyze_threats"
+        }
+        
+        # Check required tools
+        missing_required = required_tools - self._strategic_tools_called
+        if missing_required:
+            return (False, f"Must call these strategic tools first: {', '.join(missing_required)}")
+        
+        # Check minimum tool count
+        if len(self._strategic_tools_called) < self._min_strategic_tools:
+            missing_count = self._min_strategic_tools - len(self._strategic_tools_called)
+            return (False, f"Need at least {self._min_strategic_tools} strategic tool calls before acting. Called {len(self._strategic_tools_called)} so far. Consider: {', '.join(recommended_tools - self._strategic_tools_called)}")
+        
+        return (True, "")
     
     def take_turn_action(self) -> bool:
         """

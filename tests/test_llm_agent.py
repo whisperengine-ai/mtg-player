@@ -104,6 +104,91 @@ def test_simple_decision_making(game_setup):
     assert action["type"] == "play_land"
 
 
+def test_cot_enforcement_tracking(game_setup):
+    """Test that strategic tools are tracked correctly."""
+    game_state, rules_engine, _, _ = game_setup
+    
+    agent = MTGAgent(game_state, rules_engine, llm_client=None, verbose=False)
+    
+    # Reset tracking
+    agent._reset_strategic_tool_tracking()
+    assert len(agent._strategic_tools_called) == 0
+    
+    # Record some tool calls
+    agent._record_strategic_tool_call("evaluate_position")
+    assert "evaluate_position" in agent._strategic_tools_called
+    
+    agent._record_strategic_tool_call("analyze_opponent")
+    assert "analyze_opponent" in agent._strategic_tools_called
+    
+    # Non-strategic tools should not be tracked
+    agent._record_strategic_tool_call("get_game_state")
+    assert "get_game_state" not in agent._strategic_tools_called
+    
+    assert len(agent._strategic_tools_called) == 2
+
+
+def test_cot_enforcement_validation_fails(game_setup):
+    """Test that validation fails when strategic tools not called."""
+    game_state, rules_engine, _, _ = game_setup
+    
+    agent = MTGAgent(game_state, rules_engine, llm_client=None, verbose=False)
+    agent._cot_enforcement_enabled = True
+    agent._min_strategic_tools = 3
+    
+    # Reset tracking
+    agent._reset_strategic_tool_tracking()
+    
+    # Try to validate without calling any tools
+    is_valid, error_msg = agent._validate_strategic_tools_called()
+    assert not is_valid
+    assert "evaluate_position" in error_msg
+    
+    # Call evaluate_position but not enough others
+    agent._record_strategic_tool_call("evaluate_position")
+    is_valid, error_msg = agent._validate_strategic_tools_called()
+    assert not is_valid
+    assert "at least 3" in error_msg
+
+
+def test_cot_enforcement_validation_passes(game_setup):
+    """Test that validation passes when sufficient strategic tools called."""
+    game_state, rules_engine, _, _ = game_setup
+    
+    agent = MTGAgent(game_state, rules_engine, llm_client=None, verbose=False)
+    agent._cot_enforcement_enabled = True
+    agent._min_strategic_tools = 3
+    
+    # Reset tracking
+    agent._reset_strategic_tool_tracking()
+    
+    # Call required strategic tools
+    agent._record_strategic_tool_call("evaluate_position")
+    agent._record_strategic_tool_call("analyze_opponent")
+    agent._record_strategic_tool_call("recommend_strategy")
+    
+    # Should pass now
+    is_valid, error_msg = agent._validate_strategic_tools_called()
+    assert is_valid
+    assert error_msg == ""
+
+
+def test_cot_enforcement_disabled(game_setup):
+    """Test that validation always passes when enforcement disabled."""
+    game_state, rules_engine, _, _ = game_setup
+    
+    agent = MTGAgent(game_state, rules_engine, llm_client=None, verbose=False)
+    agent._cot_enforcement_enabled = False
+    
+    # Reset tracking
+    agent._reset_strategic_tool_tracking()
+    
+    # Should pass even with no tools called
+    is_valid, error_msg = agent._validate_strategic_tools_called()
+    assert is_valid
+    assert error_msg == ""
+
+
 def test_llm_initialization_openrouter():
     """Test LLM client initialization for OpenRouter."""
     with patch.dict(os.environ, {

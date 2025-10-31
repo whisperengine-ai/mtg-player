@@ -166,7 +166,50 @@ Build an AI agent capable of playing Magic: The Gathering Commander using LLM-po
 
 ---
 
-## Phase 5: Polish & Expansion (Weeks 15+)
+## Phase 5a: Strategic Reasoning Enhancement (Weeks 15-17) 🔥 IN PROGRESS
+*Goal: Improve LLM decision quality using existing tools*
+
+### 5a.1 Chain-of-Thought Enforcement ⭐ HIGH PRIORITY
+- [ ] Mandatory strategic tool sequence before actions
+- [ ] Tool call validation in agent
+- [ ] Require: `evaluate_position()` → `analyze_opponent()` → `recommend_strategy()` → action
+- [ ] Add "thinking budget" - minimum 3-5 tool calls per decision
+- [ ] Block `execute_action()` if strategic tools not called
+- [ ] Update prompts to explain requirements
+
+### 5a.2 Multi-Turn Planning
+- [ ] New tool: `plan_next_turns()` - Creates 2-3 turn plans
+- [ ] Plan storage and validation in agent
+- [ ] Plan adaptation when opponents disrupt
+- [ ] Reference plans in decision reasoning
+
+### 5a.3 Memory & Context Between Turns
+- [ ] Turn history tracking (last 5 turns)
+- [ ] Opponent pattern recognition
+- [ ] "What worked/failed" analysis
+- [ ] Inject context into LLM prompts
+- [ ] Adapt strategy based on history
+
+### 5a.4 Enhanced Combat Intelligence
+- [ ] Political target selection (attack the archenemy)
+- [ ] Threat-based attack decisions
+- [ ] Multi-target attack logic
+- [ ] Alliance-aware combat
+- [ ] Combat reasoning in prompts
+
+### 5a.5 Improved Prompt Engineering
+- [ ] Phase-specific thinking templates
+- [ ] Self-reflection prompts
+- [ ] Reasoning quality requirements
+- [ ] Test across LLM providers
+
+**Success Criteria**: AI makes strategic multi-turn plans, adapts to opponents, and demonstrates political awareness
+
+**Documentation**: See `PHASE5_STRATEGIC_REASONING.md` for detailed implementation plan
+
+---
+
+## Phase 5b: Polish & Expansion (Weeks 18+)
 *Goal: Production-ready and extensible*
 
 ### 5.1 Deck Building Assistant
