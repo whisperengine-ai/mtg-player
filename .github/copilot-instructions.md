@@ -1,5 +1,7 @@
 # Copilot Instructions — mtg-player
 
+One-paragraph summary (quick start): This repo implements an agentic MTG player where an Agent (LLM or heuristic) calls Tools that translate intentions into validated actions via a single-source-of-truth Rules Engine. Entry point is `src/main.py`; tools live under `src/tools/` and never mutate state directly; all state changes and validation flow through `src/core/rules_engine.py`. Logging is rich and split across Game/LLM/Heuristic loggers under `src/utils/logger.py`. Tests live in `tests/` and are the safest way to extend functionality.
+
 Purpose: give an AI coding agent the minimal, high-value knowledge to be productive in this repository.
 Keep this short, concrete, and example-driven.
 
@@ -46,9 +48,26 @@ python -m mypy --config-file mypy.ini src
 - Create a Tool class with `execute(self, ...) -> dict` returning JSON. Inject `game_state` and `rules_engine` from the agent.
 - Tools should call `rules_engine` methods (e.g., `rules_engine.cast_spell()`) and return `{"success": True/False, ...}`.
 
+6a) Small checklist — add a new Tool safely:
+- Pick location: `src/tools/game_tools.py` (game interaction) or `src/tools/evaluation_tools.py` (analysis/scoring).
+- Define a class with: name, description, `execute(**kwargs) -> dict` returning JSON-serializable data.
+- Accept extra/flattened args defensively (ignore unknown keys) to be LLM-tolerant.
+- Use Rules Engine for any state changes; do not mutate `GameState` directly.
+- Add to agent wiring in `src/agent/llm_agent.py` under `_setup_tools()` and expose schema in `_get_tool_schemas()` (or via tool `get_schema()` if it has one).
+- Log via appropriate logger (game_logger for visible actions; llm_logger/heuristic_logger for tool calls/results).
+- Write a minimal unit test in `tests/` validating success/error paths and JSON shape.
+- Run `pytest` and fix issues; check `logs/` for traces when debugging.
+
 6) How to extend safely (rules):
 - Write a unit test under `tests/` that exercises the new tool and rules path.
 - Log via `game_logger` for game-visible events and `llm_logger` / `heuristic_logger` for decision traces.
+
+6b) Small checklist — add a trigger-enabled card + test:
+- Add or update card in `src/data/cards.py`; set `triggered_abilities` using helpers from `src/core/triggers.py`.
+- Ensure the Rules Engine recognizes and queues triggers on ETB/dies; effects should resolve via the stack.
+- If a new effect type is needed, implement resolution in `rules_engine.resolve_trigger_ability` with JSON-friendly results.
+- Add or extend tests in `tests/test_triggers.py` covering: ETB queues to stack, resolution effect (e.g., draw/ramp), and dies triggers.
+- Run `pytest -k triggers -q` to iterate quickly, then the full suite.
 
 7) Integration & external dependencies:
 - LLM providers configured via `.env` (`LLM_PROVIDER`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `LMSTUDIO_BASE_URL`, etc.).
