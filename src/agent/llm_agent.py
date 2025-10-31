@@ -1,12 +1,14 @@
 """
 LLM Agent for playing MTG.
-Uses Chain-of-Thought reasoning and tool calling.
+Uses tool calling with optional LLM backends.
 """
 import json
 import os
 from typing import List, Dict, Any, Optional
+
 from core.game_state import GameState
 from core.rules_engine import RulesEngine
+from agent.prompts import SYSTEM_PROMPT, DECISION_PROMPT, COMBAT_PROMPT, MAIN_PHASE_PROMPT
 from tools.game_tools import (
     GetGameStateTool,
     GetLegalActionsTool,
@@ -16,358 +18,236 @@ from tools.game_tools import (
     CanRespondTool,
     GetPendingTriggersTool,
 )
-from tools.evaluation_tools import EvaluatePositionTool, CanIWinTool, StrategyRecommendationTool, OpponentModelingTool
-from agent.prompts import SYSTEM_PROMPT, DECISION_PROMPT, MAIN_PHASE_PROMPT, COMBAT_PROMPT
+from tools.evaluation_tools import (
+    EvaluatePositionTool,
+    CanIWinTool,
+    StrategyRecommendationTool,
+    OpponentModelingTool,
+)
 
-# LLM client imports
+# Optional provider SDKs
 try:
-    from openai import OpenAI
-except ImportError:
-    OpenAI = None
+    from openai import OpenAI  # type: ignore
+except Exception:
+    OpenAI = None  # type: ignore
 
 try:
-    from anthropic import Anthropic
-except ImportError:
-    Anthropic = None
+    from anthropic import Anthropic  # type: ignore
+except Exception:
+    Anthropic = None  # type: ignore
 
 
 class MTGAgent:
-    """AI Agent that plays Magic: The Gathering."""
-    
+    """Agent that uses tools and optionally an LLM to make decisions."""
+
     def __init__(
         self,
         game_state: GameState,
         rules_engine: RulesEngine,
-        llm_client: Any = None,
-        verbose: bool = False,
-        game_logger: Any = None,
-        llm_logger: Any = None,
-        heuristic_logger: Any = None,
-        use_llm: bool = True,
-        aggression: str = "balanced"
-    ):
-        """
-        Initialize the agent.
-        
-        Args:
-            game_state: Current game state
-            rules_engine: Rules engine for validation
-            llm_client: LLM client (OpenAI, Anthropic, etc.) - if None, will auto-initialize
-            verbose: Whether to print reasoning
-            llm_logger: LLM logger for recording prompts/responses
-            use_llm: Whether to use LLM for decisions (if False, uses rule-based heuristics)
-            aggression: Combat aggression level - "conservative", "balanced", or "aggressive"
-                       conservative: Only attack with power 3+ or when behind
-                       balanced: Attack with power 2+ or when at 30 life or below
-                       aggressive: Attack with all creatures every turn
-        """
+        llm_client: Optional[Any] = None,
+        use_llm: Optional[bool] = None,
+        verbose: bool = True,
+        game_logger: Optional[Any] = None,
+        llm_logger: Optional[Any] = None,
+        heuristic_logger: Optional[Any] = None,
+        aggression: str = "balanced",
+    ) -> None:
         self.game_state = game_state
         self.rules_engine = rules_engine
         self.verbose = verbose
         self.game_logger = game_logger
         self.llm_logger = llm_logger
         self.heuristic_logger = heuristic_logger
-        self.use_llm = use_llm
-        self.aggression = aggression.lower()
-        
-        # Validate aggression level
-        if self.aggression not in ["conservative", "balanced", "aggressive"]:
-            print(f"⚠️  Warning: Invalid aggression '{aggression}', defaulting to 'balanced'")
-            self.aggression = "balanced"
-        
-        # Initialize LLM client if not provided (and if we're using LLM)
-        if llm_client is None and use_llm:
-            self.llm_client = self._initialize_llm_client()
-        else:
-            self.llm_client = llm_client
-        
-        # Store provider info
+        self.aggression = aggression  # aggressive | balanced | conservative
+
+        # LLM configuration
         self.llm_provider = os.getenv("LLM_PROVIDER", "openai").lower()
-        self.model = self._get_model_name()
-        # Thinking mode controls (optional)
+        self.model = (
+            os.getenv("OPENROUTER_MODEL")
+            or os.getenv("OPENAI_MODEL")
+            or os.getenv("LLM_MODEL")
+            or "gpt-4o-mini"
+        )
         self.thinking_mode = os.getenv("LLM_THINKING", "false").lower() in ("1", "true", "yes", "on")
         self.reasoning_effort = os.getenv("LLM_REASONING_EFFORT", "medium")
-        
-        # Initialize tools
+
+        # Initialize LLM client if not provided
+        if use_llm is False:
+            self.llm_client = None
+            self.use_llm = False
+        else:
+            self.llm_client = llm_client if llm_client is not None else self._initialize_llm_client()
+            # If caller explicitly requested LLM, honor it; otherwise infer from client presence
+            self.use_llm = bool(self.llm_client) if use_llm is None else bool(use_llm and self.llm_client)
+
+        # Set up tools and prompts
         self.tools = self._setup_tools()
-        
-        # Conversation history
-        self.messages = [
-            {"role": "system", "content": SYSTEM_PROMPT}
-        ]
-    
+        self.messages: List[Dict[str, Any]] = [{"role": "system", "content": SYSTEM_PROMPT}]
+
+    def _setup_tools(self) -> Dict[str, Any]:
+        """Instantiate and wire all tools used by the agent."""
+        tools: Dict[str, Any] = {}
+
+        # Core game tools
+        tools["get_game_state"] = GetGameStateTool(game_state=self.game_state)
+        tools["get_legal_actions"] = GetLegalActionsTool(game_state=self.game_state, rules_engine=self.rules_engine)
+        tools["execute_action"] = ExecuteActionTool(game_state=self.game_state, rules_engine=self.rules_engine, game_logger=self.game_logger)
+        tools["analyze_threats"] = AnalyzeThreatsTool(game_state=self.game_state)
+        tools["get_stack_state"] = GetStackStateTool(game_state=self.game_state, rules_engine=self.rules_engine)
+        tools["can_respond"] = CanRespondTool(game_state=self.game_state, rules_engine=self.rules_engine)
+        tools["get_pending_triggers"] = GetPendingTriggersTool(game_state=self.game_state, rules_engine=self.rules_engine)
+
+        # Phase 2 evaluation tools
+        eval_tool = EvaluatePositionTool()
+        eval_tool.game_state = self.game_state
+        tools["evaluate_position"] = eval_tool
+
+        win_tool = CanIWinTool()
+        win_tool.game_state = self.game_state
+        tools["can_i_win"] = win_tool
+
+        strat_tool = StrategyRecommendationTool()
+        strat_tool.game_state = self.game_state
+        tools["recommend_strategy"] = strat_tool
+
+        opp_tool = OpponentModelingTool()
+        opp_tool.game_state = self.game_state
+        tools["analyze_opponent"] = opp_tool
+
+        return tools
+
+    def _get_tool_schemas(self) -> List[Dict[str, Any]]:
+        """Convert tools to OpenAI/compatible function calling schemas."""
+        schemas: List[Dict[str, Any]] = []
+
+        # Helpers to build basic empty-arg schemas
+        def simple_schema(name: str, description: str) -> Dict[str, Any]:
+            return {
+                "type": "function",
+                "function": {
+                    "name": name,
+                    "description": description,
+                    "parameters": {"type": "object", "properties": {}, "required": []},
+                },
+            }
+
+        # Core/simple tools
+        schemas.append(simple_schema("get_game_state", "Get the current game state including turn, phase, players' life totals, hand, battlefield, and stack."))
+        schemas.append(simple_schema("get_legal_actions", "Get all legal actions available to the active player in the current game state."))
+
+        # execute_action schema with structured action object
+        schemas.append(
+            {
+                "type": "function",
+                "function": {
+                    "name": "execute_action",
+                    "description": "Execute a game action. Use this to play lands, cast spells, attack, block, tap lands, or pass priority.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "action": {
+                                "type": "object",
+                                "description": "The action to execute",
+                                "properties": {
+                                    "type": {"type": "string"},
+                                    "card_id": {"type": "string"},
+                                    "creature_id": {"type": "string"},
+                                    "target_id": {"type": "string"},
+                                    "blocker_id": {"type": "string"},
+                                    "attacker_id": {"type": "string"},
+                                    "reasoning": {"type": "string"},
+                                },
+                                "required": ["type"],
+                            }
+                        },
+                        "required": ["action"],
+                    },
+                },
+            }
+        )
+
+        schemas.append(simple_schema("analyze_threats", "Analyze threats and opportunities on the battlefield."))
+        schemas.append(simple_schema("get_stack_state", "Get the current state of the stack, who has priority, and whether you can respond."))
+        schemas.append(simple_schema("can_respond", "Check if you can respond to spells on the stack by casting an instant. Returns available instants and recommendations."))
+        schemas.append(simple_schema("get_pending_triggers", "List triggered abilities that are queued or already on the stack, with controller, source, and effect."))
+
+        # Phase 2 tools expose their own schemas
+        schemas.append(self.tools["evaluate_position"].get_schema())
+        schemas.append(self.tools["can_i_win"].get_schema())
+        schemas.append(self.tools["recommend_strategy"].get_schema())
+        schemas.append(self.tools["analyze_opponent"].get_schema())
+
+        return schemas
+
     def _initialize_llm_client(self) -> Optional[Any]:
         """Initialize LLM client based on environment configuration."""
         provider = os.getenv("LLM_PROVIDER", "openai").lower()
-        
+
         try:
             if provider == "openrouter":
                 if OpenAI is None:
                     raise ImportError("openai package not installed. Run: pip install openai")
-                
+
                 api_key = os.getenv("OPENROUTER_API_KEY")
                 if not api_key:
                     print("⚠️  Warning: OPENROUTER_API_KEY not set. Using fallback heuristics.")
                     return None
-                # Optional thinking mode header for OpenRouter
                 default_headers = {
                     "HTTP-Referer": "https://github.com/mtg-player",
-                    "X-Title": "MTG AI Player"
+                    "X-Title": "MTG AI Player",
                 }
                 if os.getenv("LLM_THINKING", "false").lower() in ("1", "true", "yes", "on"):
-                    # Ask OpenRouter to include provider-specific hidden reasoning when available
-                    # This may be ignored for models that don't support it
                     default_headers["X-OpenRouter-Reasoning"] = "true"
 
-                return OpenAI(
-                    base_url="https://openrouter.ai/api/v1",
-                    api_key=api_key,
-                    default_headers=default_headers
-                )
-            
+                return OpenAI(base_url="https://openrouter.ai/api/v1", api_key=api_key, default_headers=default_headers)
+
             elif provider == "openai":
                 if OpenAI is None:
                     raise ImportError("openai package not installed. Run: pip install openai")
-                
+
                 api_key = os.getenv("OPENAI_API_KEY")
                 if not api_key:
                     print("⚠️  Warning: OPENAI_API_KEY not set. Using fallback heuristics.")
                     return None
-                
+
                 return OpenAI(api_key=api_key)
-            
+
             elif provider == "anthropic":
                 if Anthropic is None:
                     raise ImportError("anthropic package not installed. Run: pip install anthropic")
-                
+
                 api_key = os.getenv("ANTHROPIC_API_KEY")
                 if not api_key:
                     print("⚠️  Warning: ANTHROPIC_API_KEY not set. Using fallback heuristics.")
                     return None
-                
+
                 return Anthropic(api_key=api_key)
-            
+
             elif provider == "ollama":
                 if OpenAI is None:
                     raise ImportError("openai package not installed. Run: pip install openai")
-                
-                def _get_tool_schemas(self) -> List[Dict[str, Any]]:
-                    """Convert tools to OpenAI function calling format."""
-                    return [
-                        {
-                            "type": "function",
-                            "function": {
-                                "name": "get_game_state",
-                                "description": "Get the current game state including turn, phase, players' life totals, cards, and board state.",
-                                "parameters": {"type": "object", "properties": {}, "required": []}
-                            }
-                        },
-                        {
-                            "type": "function",
-                            "function": {
-                                "name": "get_legal_actions",
-                                "description": "Get all legal actions available to the active player in the current game state.",
-                                "parameters": {"type": "object", "properties": {}, "required": []}
-                            }
-                        },
-                        {
-                            "type": "function",
-                            "function": {
-                                "name": "execute_action",
-                                "description": "Execute a game action. Use this to play lands, cast spells, attack, block, or pass priority.",
-                                "parameters": {
-                                    "type": "object",
-                                    "properties": {
-                                        "action": {
-                                            "type": "object",
-                                            "description": "The action to execute",
-                                            "properties": {
-                                                "type": {"type": "string", "enum": ["play_land", "cast_spell", "declare_attackers", "declare_blockers", "pass"]},
-                                                "card_id": {"type": "string"},
-                                                "attackers": {"type": "array", "items": {"type": "string"}},
-                                                "blockers": {"type": "object"},
-                                                "reasoning": {"type": "string"}
-                                            },
-                                            "required": ["type"]
-                                        }
-                                    },
-                                    "required": ["action"]
-                                }
-                            }
-                        },
-                        {
-                            "type": "function",
-                            "function": {
-                                "name": "analyze_threats",
-                                "description": "Analyze threats and opportunities on the battlefield.",
-                                "parameters": {"type": "object", "properties": {}, "required": []}
-                            }
-                        },
-                        {
-                            "type": "function",
-                            "function": {
-                                "name": "get_stack_state",
-                                "description": "Get the current state of the stack. Shows all spells/abilities, who has priority, and whether you can respond.",
-                                "parameters": {"type": "object", "properties": {}, "required": []}
-                            }
-                        },
-                        {
-                            "type": "function",
-                            "function": {
-                                "name": "can_respond",
-                                "description": "Check if you can respond to spells on the stack by casting an instant. Returns available instants and recommendations.",
-                                "parameters": {"type": "object", "properties": {}, "required": []}
-                            }
-                        },
-                        {
-                            "type": "function",
-                            "function": {
-                                "name": "get_pending_triggers",
-                                "description": "List triggered abilities that are pending (queued) or on the stack, with controller, source, and effect.",
-                                "parameters": {"type": "object", "properties": {}, "required": []}
-                            }
-                        },
-                        {
-                            "type": "function",
-                            "function": {
-                                "name": "evaluate_position",
-                                "description": "Evaluate the current game position and get a strategic assessment.",
-                                "parameters": {"type": "object", "properties": {}, "required": []}
-                            }
-                        },
-                        {
-                            "type": "function",
-                            "function": {
-                                "name": "can_i_win",
-                                "description": "Analyze if you can deal lethal damage this turn.",
-                                "parameters": {"type": "object", "properties": {}, "required": []}
-                            }
-                        },
-                        {
-                            "type": "function",
-                            "function": {
-                                "name": "recommend_strategy",
-                                "description": "Get a strategic recommendation (RAMP/DEFEND/ATTACK/CLOSE).",
-                                "parameters": {"type": "object", "properties": {}, "required": []}
-                            }
-                        },
-                        {
-                            "type": "function",
-                            "function": {
-                                "name": "analyze_opponent",
-                                "description": "Analyze an opponent deck archetype and threat level.",
-                                "parameters": {
-                                    "type": "object",
-                                    "properties": {"opponent_id": {"type": "string"}},
-                                    "required": []
-                                }
-                            }
-                        }
-                    ]
-                                    },
-                                    "reasoning": {
-                                        "type": "string",
-                                        "description": "Your reasoning for this action"
-                                    }
-                                },
-                                "required": ["type"]
-                            }
-                        },
-                        "required": ["action"]
-                    }
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "analyze_threats",
-                    "description": "Analyze threats and opportunities on the battlefield.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {},
-                        "required": []
-                    }
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "get_stack_state",
-                    "description": "Get the current state of the stack. Shows all spells on the stack, who has priority, and whether you can respond.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {},
-                        "required": []
-                    }
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "can_respond",
-                    "description": "Check if you can respond to spells on the stack by casting an instant. Returns available instants and recommendations.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {},
-                        "required": []
-                    }
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "evaluate_position",
-                    "description": "Evaluate the current game position and get a strategic assessment. Returns a score (0.0-1.0), position status (winning/losing/even), and detailed breakdown of life totals, board state, mana, card advantage, and threats. Use this to make strategic decisions and assess whether you're ahead or behind.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {},
-                        "required": []
-                    }
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "can_i_win",
-                    "description": "Analyze if you can deal lethal damage this turn. Calculates total damage from attacking creatures and instant-speed spells in hand. Returns whether lethal is possible, total damage potential, and the attack line. Use this when you think you might be able to close out the game.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {},
-                        "required": []
-                    }
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "recommend_strategy",
-                    "description": "Analyze the current game state and get a strategic recommendation. Returns one of RAMP (build resources), DEFEND (stabilize), ATTACK (pressure), or CLOSE (finish). Includes priorities and reasoning for your turn.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {},
-                        "required": []
-                    }
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "analyze_opponent",
-                    "description": "Analyze opponent deck composition and identify threats. Returns archetype (aggro/control/combo/midrange), threat level (0.0-1.0), and biggest threat card. Use to understand opponent strategy and plan accordingly.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "opponent_id": {
-                                "type": "string",
-                                "description": "ID of opponent to analyze (optional, analyzes all if not specified)"
-                            }
-                        },
-                        "required": []
-                    }
-                }
-            }
-        ]
-    
+
+                base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
+                return OpenAI(base_url=base_url, api_key="ollama")
+
+            elif provider == "lmstudio":
+                if OpenAI is None:
+                    raise ImportError("openai package not installed. Run: pip install openai")
+
+                base_url = os.getenv("LMSTUDIO_BASE_URL", "http://localhost:1234/v1")
+                return OpenAI(base_url=base_url, api_key="lm-studio")
+
+            else:
+                print(f"⚠️  Warning: Unknown LLM provider '{provider}'. Using fallback heuristics.")
+                return None
+
+        except ImportError as e:
+            print(f"⚠️  Warning: {e}. Using fallback heuristics.")
+            return None
+        except Exception as e:
+            print(f"⚠️  Warning: Failed to initialize LLM client: {e}. Using fallback heuristics.")
+            return None
+
     def _make_llm_decision(self) -> Optional[Dict[str, Any]]:
         """
         Make a decision using LLM with tool calling.
@@ -788,19 +668,19 @@ class MTGAgent:
                 self.heuristic_logger.log_context(
                     pname,
                     self.game_state.turn_number,
-                        "function": {
-                            "name": "get_pending_triggers",
-                            "description": "List triggered abilities that are pending (queued) or on the stack, with controller, source, and effect.",
-                            "parameters": {
-                                "type": "object",
-                                "properties": {},
-                                "required": []
-                            }
-                        }
+                    self.game_state.current_phase.value,
+                    self.game_state.current_step.value,
+                    len(threats) if isinstance(threats, list) else 0,
+                    len(actions),
+                )
+            except Exception:
+                pass
+
             # Also log considered actions (top-N) for transparency
             try:
                 ranked = self._rank_actions(actions, active_player, threats, position_score)
                 self.heuristic_logger.log_considered_actions(ranked, limit=3)
+            except Exception:
                 pass
         
         # Step 5: Make intelligent decisions based on phase/step

@@ -69,8 +69,8 @@ class TestHeuristicIntegration:
             verbose=False
         )
         
-        # Verify all 10 tools are available
-        assert len(agent.tools) == 10
+        # Verify all tools are available (including new trigger inspection)
+        assert len(agent.tools) == 11
         assert "can_i_win" in agent.tools
         assert "recommend_strategy" in agent.tools
         assert "analyze_opponent" in agent.tools

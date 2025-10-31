@@ -44,13 +44,14 @@ def test_agent_initialization_no_llm(game_setup):
     
     assert agent.game_state == game_state
     assert agent.rules_engine == rules_engine
-    assert len(agent.tools) == 10  # Updated: includes get_stack_state, can_respond, evaluate_position, can_i_win, recommend_strategy, analyze_opponent
+    assert len(agent.tools) == 11  # Updated: includes get_stack_state, can_respond, get_pending_triggers, evaluate_position, can_i_win, recommend_strategy, analyze_opponent
     assert "get_game_state" in agent.tools
     assert "get_legal_actions" in agent.tools
     assert "execute_action" in agent.tools
     assert "analyze_threats" in agent.tools
     assert "get_stack_state" in agent.tools
     assert "can_respond" in agent.tools
+    assert "get_pending_triggers" in agent.tools
     assert "evaluate_position" in agent.tools
     assert "can_i_win" in agent.tools
     assert "recommend_strategy" in agent.tools
@@ -131,7 +132,7 @@ def test_llm_tool_schemas(game_setup):
     agent = MTGAgent(game_state, rules_engine, verbose=False)
     schemas = agent._get_tool_schemas()
     
-    assert len(schemas) == 10  # Updated: includes get_stack_state, can_respond, evaluate_position, can_i_win, recommend_strategy, analyze_opponent
+    assert len(schemas) == 11  # Updated: includes get_stack_state, can_respond, get_pending_triggers, evaluate_position, can_i_win, recommend_strategy, analyze_opponent
     
     # Check each schema has required fields
     for schema in schemas:
