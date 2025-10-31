@@ -32,8 +32,13 @@ class GetGameStateTool(Tool):
             **data
         )
     
-    def execute(self) -> Dict[str, Any]:
-        """Return game state as dictionary."""
+    def execute(self, _include_details: Optional[bool] = False, **_kwargs) -> Dict[str, Any]:
+        """Return game state as dictionary.
+        
+        Args:
+            include_details: Optional hint for richer output (currently ignored; reserved for future use)
+            **_kwargs: Ignore any extra args to be resilient to LLM tool calls
+        """
         if not self.game_state:
             return {"error": "Game state not initialized"}
         
@@ -59,7 +64,7 @@ class GetLegalActionsTool(Tool):
             **data
         )
     
-    def execute(self) -> Dict[str, Any]:
+    def execute(self, **_kwargs) -> Dict[str, Any]:
         """Return available actions."""
         if not self.game_state or not self.rules_engine:
             return {"error": "Game not initialized"}
@@ -196,16 +201,25 @@ class ExecuteActionTool(Tool):
             **data
         )
     
-    def execute(self, action: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute an action."""
+    def execute(self, action: Optional[Dict[str, Any]] = None, **kwargs) -> Dict[str, Any]:
+        """Execute an action.
+        
+        Accepts either a single `action` dict or flattened keyword args, e.g. type="pass".
+        Extra fields like `reasoning` will be ignored.
+        """
         if not self.game_state or not self.rules_engine:
             return {"error": "Game not initialized"}
         
         active_player = self.game_state.get_active_player()
         if not active_player:
             return {"error": "No active player"}
-        
-        action_type = action.get("type")
+        # If no action dict provided, build one from kwargs (LLM callers often pass flattened args)
+        if action is None:
+            # Only pass through known keys to avoid mixing reasoning text or other metadata
+            allowed_keys = {"type", "card_id", "creature_id", "target_id", "blocker_id", "attacker_id"}
+            action = {k: v for k, v in kwargs.items() if k in allowed_keys}
+
+        action_type = action.get("type") if action else None
         if not action_type:
             return {"error": "No action type specified"}
         
@@ -352,7 +366,7 @@ class AnalyzeThreatsTool(Tool):
             **data
         )
     
-    def execute(self) -> Dict[str, Any]:
+    def execute(self, **_kwargs) -> Dict[str, Any]:
         """Analyze threats."""
         if not self.game_state:
             return {"error": "Game state not initialized"}
@@ -465,7 +479,7 @@ class AnalyzeThreatsTool(Tool):
             biggest_threat_id
         )
         
-        return {
+        result = {
             "success": True,
             "threats": threats,
             "opponent_analysis": dict(sorted_opponents),
@@ -477,12 +491,25 @@ class AnalyzeThreatsTool(Tool):
                 for opponent_id, damage in active_player.commander_damage.items()
             }
         }
+
+        # Add a concise summary to help LLM reasoning
+        if sorted_opponents:
+            top_name = sorted_opponents[0][1]["player_name"]
+            top_score = sorted_opponents[0][1]["threat_score"]
+            result["summary"] = (
+                f"Top threat: {top_name} (score {top_score}). "
+                f"Advice: {political_advice or 'Balanced board.'}"
+            )
+        else:
+            result["summary"] = "No opponents remaining."
+
+        return result
     
     def _generate_political_advice(
         self,
-        active_player: Any,
+        _active_player: Any,
         opponent_scores: Dict[str, Dict],
-        biggest_threat_id: Optional[str]
+        _biggest_threat_id: Optional[str]
     ) -> str:
         """Generate political advice for multiplayer."""
         if not opponent_scores:
@@ -546,7 +573,7 @@ class GetStackStateTool(Tool):
             **data
         )
     
-    def execute(self) -> Dict[str, Any]:
+    def execute(self, **_kwargs) -> Dict[str, Any]:
         """Return stack state."""
         if not self.game_state or not self.rules_engine:
             return {"error": "Game not initialized"}
@@ -597,7 +624,7 @@ class CanRespondTool(Tool):
             **data
         )
     
-    def execute(self) -> Dict[str, Any]:
+    def execute(self, **_kwargs) -> Dict[str, Any]:
         """Check if can respond."""
         if not self.game_state or not self.rules_engine:
             return {"error": "Game not initialized"}

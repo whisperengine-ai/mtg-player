@@ -2,8 +2,11 @@
 Card representation for MTG.
 """
 from enum import Enum
-from typing import Optional, List
+from typing import Optional, List, TYPE_CHECKING, Any
 from pydantic import BaseModel, Field
+
+if TYPE_CHECKING:
+    from core.triggers import TriggeredAbility
 
 
 class CardType(str, Enum):
@@ -84,6 +87,9 @@ class Card(BaseModel):
     # Abilities and text
     oracle_text: str = ""
     keywords: List[str] = Field(default_factory=list)
+    
+    # Triggered abilities (ETB, dies, etc.)
+    triggered_abilities: List[Any] = Field(default_factory=list)  # List[TriggeredAbility] but avoid circular import
     
     # Metadata
     is_commander: bool = False

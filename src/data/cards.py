@@ -4,6 +4,11 @@ Includes commonly played Commander staples across all categories.
 """
 from typing import Optional
 from core.card import Card, CardType, ManaCost, Color
+from core.triggers import (
+    create_etb_draw_trigger,
+    create_dies_draw_trigger,
+    create_etb_ramp_trigger,
+)
 
 
 def create_basic_cards():
@@ -595,7 +600,11 @@ def create_basic_cards():
             colors=[],
             power=2,
             toughness=2,
-            oracle_text="When Solemn Simulacrum enters the battlefield, you may search your library for a basic land card, put it onto the battlefield tapped, then shuffle. When Solemn Simulacrum dies, you may draw a card."
+            oracle_text="When Solemn Simulacrum enters the battlefield, you may search your library for a basic land card, put it onto the battlefield tapped, then shuffle. When Solemn Simulacrum dies, you may draw a card.",
+            triggered_abilities=[
+                create_etb_ramp_trigger(),
+                create_dies_draw_trigger(1),
+            ],
         ),
         Card(
             id="mulldrifter",
@@ -606,7 +615,8 @@ def create_basic_cards():
             power=2,
             toughness=2,
             keywords=["flying"],
-            oracle_text="Flying. When Mulldrifter enters the battlefield, draw two cards. Evoke {2}{U}"
+            oracle_text="Flying. When Mulldrifter enters the battlefield, draw two cards. Evoke {2}{U}",
+            triggered_abilities=[create_etb_draw_trigger(2)],
         ),
         Card(
             id="wood_elves",
@@ -616,7 +626,8 @@ def create_basic_cards():
             colors=[Color.GREEN],
             power=1,
             toughness=1,
-            oracle_text="When Wood Elves enters the battlefield, search your library for a Forest card, put it onto the battlefield tapped, then shuffle."
+            oracle_text="When Wood Elves enters the battlefield, search your library for a Forest card, put it onto the battlefield tapped, then shuffle.",
+            triggered_abilities=[create_etb_ramp_trigger()],
         ),
         Card(
             id="eternal_witness",
@@ -726,7 +737,8 @@ def create_basic_cards():
             power=1,
             toughness=1,
             keywords=["flying", "deathtouch"],
-            oracle_text="Flying, deathtouch. When Baleful Strix enters the battlefield, draw a card."
+            oracle_text="Flying, deathtouch. When Baleful Strix enters the battlefield, draw a card.",
+            triggered_abilities=[create_etb_draw_trigger(1)],
         ),
         Card(
             id="snapcaster_mage",
@@ -972,6 +984,64 @@ def create_basic_cards():
     # ===== MORE VALUE CREATURES =====
     cards.extend([
         Card(
+            id="elvish_visionary",
+            name="Elvish Visionary",
+            mana_cost=ManaCost(generic=1, green=1),
+            card_types=[CardType.CREATURE],
+            colors=[Color.GREEN],
+            power=1,
+            toughness=1,
+            oracle_text="When Elvish Visionary enters the battlefield, draw a card.",
+            triggered_abilities=[create_etb_draw_trigger(1)],
+        ),
+        Card(
+            id="skyscanner",
+            name="Skyscanner",
+            mana_cost=ManaCost(generic=3),
+            card_types=[CardType.ARTIFACT, CardType.CREATURE],
+            colors=[],
+            power=1,
+            toughness=1,
+            keywords=["flying"],
+            oracle_text="Flying. When Skyscanner enters the battlefield, draw a card.",
+            triggered_abilities=[create_etb_draw_trigger(1)],
+        ),
+        Card(
+            id="cloudkin_seer",
+            name="Cloudkin Seer",
+            mana_cost=ManaCost(generic=2, blue=1),
+            card_types=[CardType.CREATURE],
+            colors=[Color.BLUE],
+            power=2,
+            toughness=1,
+            keywords=["flying"],
+            oracle_text="Flying. When Cloudkin Seer enters the battlefield, draw a card.",
+            triggered_abilities=[create_etb_draw_trigger(1)],
+        ),
+        Card(
+            id="inspiring_overseer",
+            name="Inspiring Overseer",
+            mana_cost=ManaCost(generic=2, white=1),
+            card_types=[CardType.CREATURE],
+            colors=[Color.WHITE],
+            power=2,
+            toughness=1,
+            keywords=["flying"],
+            oracle_text="Flying. When Inspiring Overseer enters the battlefield, draw a card.",
+            triggered_abilities=[create_etb_draw_trigger(1)],
+        ),
+        Card(
+            id="priest_of_ancient_lore",
+            name="Priest of Ancient Lore",
+            mana_cost=ManaCost(generic=2, white=1),
+            card_types=[CardType.CREATURE],
+            colors=[Color.WHITE],
+            power=2,
+            toughness=1,
+            oracle_text="When Priest of Ancient Lore enters the battlefield, draw a card.",
+            triggered_abilities=[create_etb_draw_trigger(1)],
+        ),
+        Card(
             id="sakura_tribe_elder",
             name="Sakura-Tribe Elder",
             mana_cost=ManaCost(generic=1, green=1),
@@ -1000,7 +1070,8 @@ def create_basic_cards():
             power=0,
             toughness=4,
             keywords=["defender"],
-            oracle_text="Defender. When Wall of Blossoms enters the battlefield, draw a card."
+            oracle_text="Defender. When Wall of Blossoms enters the battlefield, draw a card.",
+            triggered_abilities=[create_etb_draw_trigger(1)],
         ),
         Card(
             id="wall_of_omens",
@@ -1011,7 +1082,8 @@ def create_basic_cards():
             power=0,
             toughness=4,
             keywords=["defender"],
-            oracle_text="Defender. When Wall of Omens enters the battlefield, draw a card."
+            oracle_text="Defender. When Wall of Omens enters the battlefield, draw a card.",
+            triggered_abilities=[create_etb_draw_trigger(1)],
         ),
         Card(
             id="mesa_enchantress",

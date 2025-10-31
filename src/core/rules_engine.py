@@ -6,8 +6,9 @@ from typing import Optional, List, Any
 import uuid
 from core.game_state import GameState, Phase, Step
 from core.player import Player
-from core.card import CardInstance, Card
+from core.card import CardInstance, Card, CardType
 from core.stack import Stack, StackObject, StackObjectType
+from core.triggers import TriggerQueue, QueuedTrigger, TriggerType
 
 
 class RulesEngine:
@@ -16,11 +17,22 @@ class RulesEngine:
     def __init__(self, game_state: GameState, game_logger: Optional[Any] = None):
         self.game_state = game_state
         self.stack = Stack()  # Create stack manager
+        self.trigger_queue = TriggerQueue()  # Create trigger queue
         self._pending_cards: dict = {}  # Store cards pending resolution
+        self._pending_triggers: dict = {}  # Map stack object IDs to queued triggers
         # Optional game logger (duck-typed to avoid hard dependency)
         self.game_logger: Optional[Any] = game_logger
         # Feature flags/config
         self.turn_summary_enabled: bool = False
+        
+        # Initialize stack priority order from current game state
+        try:
+            player_ids = [p.id for p in self.game_state.players]
+            if player_ids and self.game_state.active_player_id:
+                self.stack.set_priority_order(player_ids, self.game_state.active_player_id)
+        except Exception:
+            # In tests or partial setup, we may not have full state; ignore
+            pass
 
     def set_game_logger(self, game_logger: Any) -> None:
         """Attach a game logger after initialization."""
@@ -212,7 +224,7 @@ class RulesEngine:
 
     def cast_spell(self, player: Player, card_instance: CardInstance, targets: Optional[List[str]] = None) -> bool:
         """Cast a spell from hand - puts it on the stack."""
-        from src.core.card import Color
+        from core.card import Color
         
         # Validation
         if card_instance not in player.hand:
@@ -364,6 +376,10 @@ class RulesEngine:
                 # Creature goes to battlefield
                 card_instance.summoning_sick = True
                 controller.battlefield.append(card_instance)
+                
+                # Check for ETB triggers
+                self.check_etb_triggers(card_instance)
+                
                 # Log resolution outcome
                 if self.game_logger and hasattr(self.game_logger, "log_stack_resolve"):
                     self.game_logger.log_stack_resolve(controller.name, card_instance.card.name, "to battlefield")
@@ -376,6 +392,9 @@ class RulesEngine:
             
             # Clean up pending cards
             self._pending_cards.pop(stack_obj.card_instance_id, None)
+        elif stack_obj.object_type == StackObjectType.ABILITY:
+            # Resolve triggered ability
+            self.resolve_trigger_ability(stack_obj)
         
         # Priority returns to active player after resolution
         self.stack.reset_priority_after_resolution(self.game_state.active_player_id)
@@ -524,6 +543,9 @@ class RulesEngine:
                     player.command_tax += 2  # Increment command tax by {2}
                 else:
                     player.graveyard.append(creature)
+                
+                # Queue dies triggers for this creature
+                self.check_dies_triggers(creature)
         
         # Clear combat state
         for player in self.game_state.players:
@@ -594,3 +616,157 @@ class RulesEngine:
             controller_id=owner_id,
             owner_id=owner_id
         )
+
+    # ===== Triggered Ability System =====
+    
+    def check_etb_triggers(self, permanent: CardInstance):
+        """Check for enters-the-battlefield triggers on a permanent."""
+        if not hasattr(permanent.card, 'triggered_abilities'):
+            return
+        
+        for ability in permanent.card.triggered_abilities:
+            if ability.trigger_type == TriggerType.ETB:
+                # Queue the trigger
+                is_active = permanent.controller_id == self.game_state.active_player_id
+                trigger = QueuedTrigger(
+                    ability=ability,
+                    controller_id=permanent.controller_id,
+                    source_id=permanent.instance_id,
+                    source_name=permanent.card.name,
+                    is_active_player=is_active
+                )
+                self.trigger_queue.add_trigger(trigger)
+                
+                # Log the trigger
+                if self.game_logger and hasattr(self.game_logger, 'log_trigger'):
+                    controller = self.game_state.get_player(permanent.controller_id)
+                    if controller:
+                        self.game_logger.log_trigger(
+                            controller.name,
+                            permanent.card.name,
+                            str(ability)
+                        )
+        # Put queued triggers on the stack immediately (simplified timing)
+        self.put_triggers_on_stack()
+    
+    def check_dies_triggers(self, permanent: CardInstance):
+        """Check for dies triggers on a permanent."""
+        if not hasattr(permanent.card, 'triggered_abilities'):
+            return
+        
+        for ability in permanent.card.triggered_abilities:
+            if ability.trigger_type == TriggerType.DIES:
+                # Queue the trigger
+                is_active = permanent.controller_id == self.game_state.active_player_id
+                trigger = QueuedTrigger(
+                    ability=ability,
+                    controller_id=permanent.controller_id,
+                    source_id=permanent.instance_id,
+                    source_name=permanent.card.name,
+                    is_active_player=is_active
+                )
+                self.trigger_queue.add_trigger(trigger)
+                
+                # Log the trigger
+                if self.game_logger and hasattr(self.game_logger, 'log_trigger'):
+                    controller = self.game_state.get_player(permanent.controller_id)
+                    if controller:
+                        self.game_logger.log_trigger(
+                            controller.name,
+                            permanent.card.name,
+                            str(ability)
+                        )
+        # Put queued triggers on the stack immediately (simplified timing)
+        self.put_triggers_on_stack()
+    
+    def put_triggers_on_stack(self):
+        """Put all queued triggers onto the stack in APNAP order."""
+        if not self.trigger_queue.has_triggers():
+            return
+        
+        # Get triggers in APNAP order
+        triggers = self.trigger_queue.get_all()
+        
+        for trigger in triggers:
+            # Create a stack object for the trigger
+            stack_obj = StackObject(
+                object_id=str(uuid.uuid4()),
+                object_type=StackObjectType.ABILITY,
+                controller_id=trigger.controller_id,
+                ability_source_id=trigger.source_id,
+                ability_text=str(trigger.ability),
+                targets=trigger.chosen_targets,
+                can_be_countered=False,  # Triggered abilities can't normally be countered
+                is_instant_speed=True,
+            )
+            
+            # Put on stack
+            self.stack.push(stack_obj)
+            # Track pending trigger by stack object id for resolution
+            self._pending_triggers[stack_obj.object_id] = trigger
+            
+            # Log
+            if self.game_logger and hasattr(self.game_logger, 'log_stack_add'):
+                controller = self.game_state.get_player(trigger.controller_id)
+                if controller:
+                    self.game_logger.log_stack_add(
+                        controller.name,
+                        f"{trigger.source_name}'s ability",
+                        "ability"
+                    )
+        
+        # Clear the trigger queue
+        self.trigger_queue.clear()
+        
+        # Update game state stack representation
+        self.game_state.stack = [obj.model_dump() for obj in self.stack.get_all()]
+        
+        # Priority to active player
+        self.stack.reset_priority_after_resolution(self.game_state.active_player_id)
+    
+    def resolve_trigger_ability(self, stack_obj: StackObject):
+        """Resolve a triggered ability from the stack."""
+        controller = self.game_state.get_player(stack_obj.controller_id)
+        if not controller:
+            return
+        
+        # Lookup the queued trigger details
+        queued = self._pending_triggers.pop(stack_obj.object_id, None)
+        
+        # Default logging name
+        ability_name = stack_obj.ability_text or "Triggered ability"
+        
+        # Execute basic effects we support
+        if queued:
+            effect = queued.ability.effect
+            if effect.effect_type == "draw_card":
+                count = effect.amount or 1
+                drawn = 0
+                for _ in range(count):
+                    if controller.draw_card() is not None:
+                        drawn += 1
+                # Optional: log draws
+                if self.game_logger and hasattr(self.game_logger, "log_draw") and drawn > 0:
+                    self.game_logger.log_draw(controller.name, len(controller.hand))
+            elif effect.effect_type == "ramp":
+                # Simplified: put the first land from library onto battlefield tapped
+                land_idx = None
+                for idx, ci in enumerate(controller.library):
+                    if CardType.LAND in ci.card.card_types:
+                        land_idx = idx
+                        break
+                if land_idx is not None:
+                    land_ci = controller.library.pop(land_idx)
+                    land_ci.is_tapped = True
+                    land_ci.summoning_sick = False
+                    controller.battlefield.append(land_ci)
+            # Additional effect types can be added here (e.g., deal_damage)
+        
+        # Log resolution
+        if self.game_logger and hasattr(self.game_logger, 'log_stack_resolve'):
+            self.game_logger.log_stack_resolve(
+                controller.name,
+                ability_name,
+                "resolved"
+            )
+

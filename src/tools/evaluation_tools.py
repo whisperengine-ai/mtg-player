@@ -427,7 +427,10 @@ class CanIWinTool:
             "player_name": player.name,
             "can_win": lethal_target is not None,
             "lethal_target": lethal_target.name if lethal_target else None,
+            "lethal_target_id": lethal_target.id if lethal_target else None,
+            "lethal_target_life": lethal_target.life if lethal_target else None,
             "damage": total_damage,
+            "total_damage": total_damage,  # backward-compat alias
             "damage_breakdown": {
                 "creatures": creature_damage["damage"],
                 "spells": spell_damage["damage"]
@@ -484,33 +487,40 @@ class CanIWinTool:
         count = 0
         min_mana_needed = 0
         spells = []
-        
+
         available_mana = player.available_mana().total()
-        
+
+        # Gather candidate damage spells we could afford individually
+        candidates: List[Dict[str, Any]] = []
         for spell in player.hand:
             card = spell.card
-            
-            # Skip lands
             if card.is_land():
                 continue
-            
-            # Look for damage-dealing spells
             damage = self._extract_damage_from_card(card)
-            
-            if damage > 0:
-                mana_cost = card.mana_cost.total()
-                
-                # Only include if we might be able to afford it
-                if mana_cost <= available_mana:
-                    total_damage += damage
-                    min_mana_needed += mana_cost
-                    count += 1
-                    spells.append({
-                        "name": card.name,
-                        "damage": damage,
-                        "cost": mana_cost
-                    })
-        
+            if damage <= 0:
+                continue
+            mana_cost = card.mana_cost.total()
+            if mana_cost <= available_mana:
+                candidates.append({
+                    "name": card.name,
+                    "damage": damage,
+                    "cost": mana_cost
+                })
+
+        # Greedy pick by lowest cost within total available mana
+        candidates.sort(key=lambda c: c["cost"])
+        mana_used = 0
+        for c in candidates:
+            if mana_used + c["cost"] <= available_mana:
+                mana_used += c["cost"]
+                total_damage += c["damage"]
+                count += 1
+                spells.append(c)
+            else:
+                break
+
+        min_mana_needed = mana_used
+
         return {
             "damage": total_damage,
             "count": count,
@@ -559,10 +569,15 @@ class CanIWinTool:
     
     def _are_all_creatures_ready(self, player: Any) -> bool:
         """Check if all attacking creatures are ready (not summoning sick, not tapped)."""
-        for creature in player.creatures_in_play():
-            if creature.can_attack():
-                return True
-        return False
+        creatures = player.creatures_in_play()
+        if not creatures:
+            # No creatures means nothing to be "not ready" for attacking
+            return True
+        # Return True only if all creatures are able to attack
+        for creature in creatures:
+            if not creature.can_attack():
+                return False
+        return True
     
     def _generate_summary(self, lethal_target: Any, damage: int, line: str) -> str:
         """Generate human-readable summary."""

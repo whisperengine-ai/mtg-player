@@ -101,8 +101,6 @@ class Player(BaseModel):
 
     def available_mana(self) -> ManaPool:
         """Calculate available mana from untapped lands."""
-        from src.core.card import Color
-        
         mana = ManaPool()
         for land in self.untapped_lands():
             # Check for basic land types by name or colors
