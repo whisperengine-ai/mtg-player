@@ -142,6 +142,56 @@ class TestTriggers:
         assert forest_inst.is_tapped is True
         assert forest_inst not in p1.library
 
+        def test_etb_ramp_farhaven_elf(self):
+            """Casting Farhaven Elf should put a land from library onto battlefield tapped."""
+            game_state = create_game_state()
+            rules = RulesEngine(game_state)
+            p1 = game_state.get_player("p1")
+
+            cards = create_basic_cards()
+            farhaven_elf = cards["farhaven_elf"]
+            forest_card = cards["forest_1"]
+
+            forest_inst = rules.create_card_instance(forest_card, owner_id=p1.id)
+            p1.library.append(forest_inst)
+
+            add_basic_lands(rules, p1, count=3, name="Forest")
+            elf_inst = rules.create_card_instance(farhaven_elf, owner_id=p1.id)
+            p1.hand.append(elf_inst)
+
+            assert rules.cast_spell(p1, elf_inst)
+            for _ in range(4):
+                rules.pass_priority()
+
+            assert forest_inst in p1.battlefield
+            assert forest_inst.is_tapped is True
+            assert forest_inst not in p1.library
+
+        def test_etb_ramp_ondu_giant(self):
+            """Casting Ondu Giant should put a land from library onto battlefield tapped."""
+            game_state = create_game_state()
+            rules = RulesEngine(game_state)
+            p1 = game_state.get_player("p1")
+
+            cards = create_basic_cards()
+            ondu_giant = cards["ondu_giant"]
+            forest_card = cards["forest_1"]
+
+            forest_inst = rules.create_card_instance(forest_card, owner_id=p1.id)
+            p1.library.append(forest_inst)
+
+            add_basic_lands(rules, p1, count=3, name="Forest")
+            giant_inst = rules.create_card_instance(ondu_giant, owner_id=p1.id)
+            p1.hand.append(giant_inst)
+
+            assert rules.cast_spell(p1, giant_inst)
+            for _ in range(4):
+                rules.pass_priority()
+
+            assert forest_inst in p1.battlefield
+            assert forest_inst.is_tapped is True
+            assert forest_inst not in p1.library
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-q"]) 
