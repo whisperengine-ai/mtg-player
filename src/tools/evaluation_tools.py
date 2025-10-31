@@ -1301,3 +1301,197 @@ class OpponentModelingTool:
             summary += f". Biggest threat: {biggest_threat['name']} ({biggest_threat['power']}/{biggest_threat['toughness']})"
         
         return summary
+
+
+class GetTurnHistoryTool:
+    """
+    Get recent turn history to understand opponent patterns and game flow.
+    Phase 5a.3: Turn History & Memory
+    """
+    
+    def __init__(self):
+        self.game_state: Optional[Any] = None  # Will be set by agent
+    
+    def get_schema(self) -> Dict[str, Any]:
+        """Return tool schema for LLM."""
+        return {
+            "type": "function",
+            "function": {
+                "name": "get_turn_history",
+                "description": "Get recent game history showing what players have done in past turns. Use this to identify opponent patterns (e.g., 'Player 2 cast removal on turns 3, 5, 7'), remember your own plays, and make informed strategic decisions based on game flow.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "last_n_turns": {
+                            "type": "integer",
+                            "description": "Number of recent turns to retrieve (default: 5, max: 10)",
+                            "default": 5
+                        },
+                        "player_filter": {
+                            "type": "string",
+                            "description": "Optional: Filter events by specific player ID (omit to see all players)"
+                        },
+                        "event_filter": {
+                            "type": "string",
+                            "description": "Optional: Filter by event type (e.g., 'spell_cast', 'creature_played', 'attack', 'damage')"
+                        }
+                    },
+                    "required": []
+                }
+            }
+        }
+    
+    def execute(
+        self,
+        last_n_turns: int = 5,
+        player_filter: Optional[str] = None,
+        event_filter: Optional[str] = None,
+        **kwargs: Any  # Absorb extra args from LLM
+    ) -> Dict[str, Any]:
+        """
+        Retrieve turn history with optional filtering.
+        
+        Args:
+            last_n_turns: Number of recent turns to retrieve (max 10)
+            player_filter: Optional player ID to filter events
+            event_filter: Optional event type to filter
+            
+        Returns:
+            Dictionary with:
+            - success: bool
+            - turn_range: (min_turn, max_turn)
+            - event_count: number of events
+            - events: list of historical events
+            - patterns: detected opponent patterns
+            - summary: text summary of recent events
+        """
+        if not self.game_state:
+            return {"success": False, "error": "Game state not available"}
+        
+        # Clamp to reasonable range
+        last_n_turns = min(10, max(1, last_n_turns))
+        
+        # Get recent history
+        history = self.game_state.get_recent_history(last_n_turns)
+        
+        # Apply filters if provided
+        if player_filter:
+            history = [e for e in history if e.get("player_id") == player_filter]
+        
+        if event_filter:
+            history = [e for e in history if e.get("event_type") == event_filter]
+        
+        # Detect patterns
+        patterns = self._detect_patterns(history)
+        
+        # Generate summary
+        summary = self._generate_summary(history, self.game_state.turn_number, last_n_turns)
+        
+        return {
+            "success": True,
+            "turn_range": (
+                max(1, self.game_state.turn_number - last_n_turns),
+                self.game_state.turn_number
+            ),
+            "event_count": len(history),
+            "events": history,
+            "patterns": patterns,
+            "summary": summary
+        }
+    
+    def _detect_patterns(self, history: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Detect interesting patterns in turn history."""
+        patterns: Dict[str, Any] = {
+            "aggressive_players": [],
+            "controlling_players": [],
+            "ramping_players": [],
+            "threats_removed": [],
+        }
+        
+        # Count actions by player
+        player_actions: Dict[str, Dict[str, int]] = {}
+        
+        for event in history:
+            player_id = event.get("player_id", "")
+            event_type = event.get("event_type", "")
+            
+            if player_id not in player_actions:
+                player_actions[player_id] = {
+                    "attacks": 0,
+                    "spells_cast": 0,
+                    "creatures_played": 0,
+                    "removal_cast": 0,
+                    "ramp_spells": 0,
+                }
+            
+            if event_type == "attack":
+                player_actions[player_id]["attacks"] += 1
+            elif event_type == "spell_cast":
+                player_actions[player_id]["spells_cast"] += 1
+                # Check for removal/ramp in details
+                details = event.get("details", {})
+                if details.get("is_removal"):
+                    player_actions[player_id]["removal_cast"] += 1
+                if details.get("is_ramp"):
+                    player_actions[player_id]["ramp_spells"] += 1
+            elif event_type == "creature_played":
+                player_actions[player_id]["creatures_played"] += 1
+        
+        # Identify patterns
+        for player_id, actions in player_actions.items():
+            player_name = self._get_player_name(player_id)
+            
+            if actions["attacks"] >= 3:
+                patterns["aggressive_players"].append({
+                    "player_id": player_id,
+                    "player_name": player_name,
+                    "attack_count": actions["attacks"]
+                })
+            
+            if actions["removal_cast"] >= 2:
+                patterns["controlling_players"].append({
+                    "player_id": player_id,
+                    "player_name": player_name,
+                    "removal_count": actions["removal_cast"]
+                })
+            
+            if actions["ramp_spells"] >= 2:
+                patterns["ramping_players"].append({
+                    "player_id": player_id,
+                    "player_name": player_name,
+                    "ramp_count": actions["ramp_spells"]
+                })
+        
+        return patterns
+    
+    def _get_player_name(self, player_id: str) -> str:
+        """Get player name from ID."""
+        if not self.game_state:
+            return "Unknown"
+        
+        player = self.game_state.get_player(player_id)
+        return player.name if player else "Unknown"
+    
+    def _generate_summary(self, history: List[Dict[str, Any]], current_turn: int, n_turns: int) -> str:
+        """Generate human-readable summary of recent events."""
+        if not history:
+            return f"No events recorded in the last {n_turns} turns."
+        
+        min_turn = max(1, current_turn - n_turns)
+        event_count = len(history)
+        
+        # Count event types
+        event_types: Dict[str, int] = {}
+        for event in history:
+            event_type = event.get("event_type", "unknown")
+            event_types[event_type] = event_types.get(event_type, 0) + 1
+        
+        # Build summary
+        summary = f"📜 Last {n_turns} turns (Turn {min_turn}-{current_turn}): {event_count} events recorded. "
+        
+        if event_types:
+            top_events = sorted(event_types.items(), key=lambda x: x[1], reverse=True)[:3]
+            summary += "Most common: " + ", ".join(f"{count}x {event}" for event, count in top_events)
+        
+        return summary
+

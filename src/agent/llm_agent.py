@@ -23,6 +23,7 @@ from tools.evaluation_tools import (
     CanIWinTool,
     StrategyRecommendationTool,
     OpponentModelingTool,
+    GetTurnHistoryTool,
 )
 
 # Optional provider SDKs
@@ -119,6 +120,11 @@ class MTGAgent:
         opp_tool.game_state = self.game_state
         tools["analyze_opponent"] = opp_tool
 
+        # Phase 5a.3: Turn history tool
+        history_tool = GetTurnHistoryTool()
+        history_tool.game_state = self.game_state
+        tools["get_turn_history"] = history_tool
+
         return tools
 
     def _get_tool_schemas(self) -> List[Dict[str, Any]]:
@@ -181,6 +187,9 @@ class MTGAgent:
         schemas.append(self.tools["can_i_win"].get_schema())
         schemas.append(self.tools["recommend_strategy"].get_schema())
         schemas.append(self.tools["analyze_opponent"].get_schema())
+        
+        # Phase 5a.3: Turn history tool
+        schemas.append(self.tools["get_turn_history"].get_schema())
 
         return schemas
 

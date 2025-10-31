@@ -2,7 +2,7 @@
 Game state and turn structure for MTG.
 """
 from enum import Enum
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 from core.player import Player
 from core.card import CardInstance
@@ -56,6 +56,9 @@ class GameState(BaseModel):
     # Stack (managed externally by RulesEngine, but serialized here)
     stack: List[dict] = Field(default_factory=list)
     
+    # Turn history tracking (Phase 5a.3)
+    turn_history: List[Dict[str, Any]] = Field(default_factory=list)
+    
     # Game state
     is_game_over: bool = False
     winner_id: Optional[str] = None
@@ -92,6 +95,33 @@ class GameState(BaseModel):
         elif len(alive_players) == 0:
             self.is_game_over = True
             # Draw game
+
+    def record_turn_event(self, event_type: str, player_id: str, details: Dict[str, Any]) -> None:
+        """
+        Record a significant game event to turn history.
+        Phase 5a.3: Turn History & Memory
+        """
+        player = self.get_player(player_id)
+        player_name = player.name if player else "Unknown"
+        
+        event = {
+            "turn": self.turn_number,
+            "phase": self.current_phase.value,
+            "step": self.current_step.value,
+            "event_type": event_type,
+            "player_id": player_id,
+            "player_name": player_name,
+            "details": details,
+        }
+        self.turn_history.append(event)  # type: ignore
+    
+    def get_recent_history(self, last_n_turns: int = 5) -> List[Dict[str, Any]]:
+        """
+        Get recent turn history events.
+        Phase 5a.3: Turn History & Memory
+        """
+        min_turn = max(1, self.turn_number - last_n_turns)
+        return [event for event in self.turn_history if event["turn"] >= min_turn]
 
     def get_next_player_id(self, current_player_id: str) -> str:
         """Get the next player in turn order."""

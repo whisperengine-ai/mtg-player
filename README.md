@@ -262,21 +262,22 @@ This ensures the AI can never make illegal moves or hallucinate game state.
 
 **Phase 5a: Strategic Reasoning Enhancement** 🔥 IN PROGRESS
 
-### Latest Feature: Chain-of-Thought Enforcement ✨
+### Latest Feature: Turn History & Memory ✨
 
-The LLM agent now enforces strategic thinking before making moves:
-- **Required Strategic Analysis**: Must call `evaluate_position`, `analyze_opponent`, and `recommend_strategy` before executing actions
-- **Configurable**: Set `COT_ENFORCEMENT=true` and `MIN_STRATEGIC_TOOLS=3` in `.env`
-- **Better Decisions**: Prevents "legal but dumb" moves by forcing analysis first
-- **73 Tests Passing**: Including new Chain-of-Thought enforcement tests
+The LLM agent now has memory of recent gameplay:
+- **Turn History Tracking**: Automatically records land plays, creature casts, spell casts, and attacks
+- **Pattern Recognition**: Detects aggressive, controlling, and ramping opponent patterns
+- **Memory Tool**: `get_turn_history(last_n_turns=5)` retrieves recent events with filtering options
+- **Strategic Context**: LLM can remember "Player 2 attacked 3x in last 3 turns" and adapt strategy
 
 ### What's Working
 - Phase 4 core complete (stack and instant-speed interactions) ✅
+- Phase 5a.1: Chain-of-Thought enforcement ✅
+- Phase 5a.3: Turn history & memory ✅ NEW!
 - 152-card Commander staples database ✅
 - Archetype-based deck builder: ramp, control, midrange ✅
 - 4-player Commander setup with 40 life and commander zone ✅
-- Chain-of-Thought enforcement for strategic decision-making ✅ NEW!
-- 73 tests passing (pytest) ✅
+- 20 tests passing (pytest) ✅
 - Type checks clean (mypy) ✅
 
 ### Next Up (Phase 5a)

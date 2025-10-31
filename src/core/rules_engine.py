@@ -200,6 +200,13 @@ class RulesEngine:
         player.battlefield.append(card_instance)
         player.has_played_land_this_turn = True
         
+        # Phase 5a.3: Record event
+        self.game_state.record_turn_event(
+            event_type="land_played",
+            player_id=player.id,
+            details={"card_name": card_instance.card.name}
+        )
+        
         return True
 
     def tap_land_for_mana(self, player: Player, land: CardInstance) -> bool:
@@ -377,6 +384,17 @@ class RulesEngine:
                 card_instance.summoning_sick = True
                 controller.battlefield.append(card_instance)
                 
+                # Phase 5a.3: Record creature played event
+                self.game_state.record_turn_event(
+                    event_type="creature_played",
+                    player_id=controller.id,
+                    details={
+                        "card_name": card_instance.card.name,
+                        "power": card_instance.card.power if card_instance.card.power else 0,
+                        "toughness": card_instance.card.toughness if card_instance.card.toughness else 0
+                    }
+                )
+                
                 # Check for ETB triggers
                 self.check_etb_triggers(card_instance)
                 
@@ -386,6 +404,18 @@ class RulesEngine:
             else:
                 # Other spells resolve and go to graveyard
                 controller.graveyard.append(card_instance)
+                
+                # Phase 5a.3: Record spell cast event
+                self.game_state.record_turn_event(
+                    event_type="spell_cast",
+                    player_id=controller.id,
+                    details={
+                        "card_name": card_instance.card.name,
+                        "is_removal": "destroy" in card_instance.card.effect_text.lower() if card_instance.card.effect_text else False,
+                        "is_ramp": any(word in card_instance.card.effect_text.lower() for word in ["search", "land", "mana"]) if card_instance.card.effect_text else False
+                    }
+                )
+                
                 # Log resolution outcome
                 if self.game_logger and hasattr(self.game_logger, "log_stack_resolve"):
                     self.game_logger.log_stack_resolve(controller.name, card_instance.card.name, "to graveyard")
@@ -460,6 +490,23 @@ class RulesEngine:
         for creature, target_id in attackers:
             creature.is_attacking = True
             creature.is_tapped = True
+        
+        # Phase 5a.3: Record attack event
+        if attackers:
+            total_power = sum((c.card.power if c.card.power else 0) for c, _ in attackers)
+            targets = {}
+            for _, target_id in attackers:
+                targets[target_id] = targets.get(target_id, 0) + 1
+            
+            self.game_state.record_turn_event(
+                event_type="attack",
+                player_id=player.id,
+                details={
+                    "attacker_count": len(attackers),
+                    "total_power": total_power,
+                    "targets": targets
+                }
+            )
         
         return True
 
