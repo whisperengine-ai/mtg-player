@@ -24,6 +24,7 @@ from tools.evaluation_tools import (
     StrategyRecommendationTool,
     OpponentModelingTool,
     GetTurnHistoryTool,
+    RecommendCombatTargetsTool,
 )
 
 # Optional provider SDKs
@@ -125,6 +126,11 @@ class MTGAgent:
         history_tool.game_state = self.game_state
         tools["get_turn_history"] = history_tool
 
+        # Phase 5a.4: Combat target recommendation
+        combat_tool = RecommendCombatTargetsTool()
+        combat_tool.game_state = self.game_state
+        tools["recommend_combat_targets"] = combat_tool
+
         return tools
 
     def _get_tool_schemas(self) -> List[Dict[str, Any]]:
@@ -190,6 +196,9 @@ class MTGAgent:
         
         # Phase 5a.3: Turn history tool
         schemas.append(self.tools["get_turn_history"].get_schema())
+        
+        # Phase 5a.4: Combat target recommendation
+        schemas.append(self.tools["recommend_combat_targets"].get_schema())
 
         return schemas
 

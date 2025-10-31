@@ -262,18 +262,19 @@ This ensures the AI can never make illegal moves or hallucinate game state.
 
 **Phase 5a: Strategic Reasoning Enhancement** 🔥 IN PROGRESS
 
-### Latest Feature: Turn History & Memory ✨
+### Latest Feature: Political Combat Intelligence ✨
 
-The LLM agent now has memory of recent gameplay:
-- **Turn History Tracking**: Automatically records land plays, creature casts, spell casts, and attacks
-- **Pattern Recognition**: Detects aggressive, controlling, and ramping opponent patterns
-- **Memory Tool**: `get_turn_history(last_n_turns=5)` retrieves recent events with filtering options
-- **Strategic Context**: LLM can remember "Player 2 attacked 3x in last 3 turns" and adapt strategy
+The LLM agent now makes politically-aware multiplayer combat decisions:
+- **Smart Target Selection**: 4-factor priority scoring (threat, vulnerability, revenge, political safety)
+- **Revenge Tracking**: Remembers who attacked you recently and retaliates strategically
+- **Political Awareness**: Avoids attacking trailing players (politically risky), targets leaders (justified)
+- **Combat Tool**: `recommend_combat_targets()` returns prioritized target list with emoji advice
 
 ### What's Working
 - Phase 4 core complete (stack and instant-speed interactions) ✅
 - Phase 5a.1: Chain-of-Thought enforcement ✅
-- Phase 5a.3: Turn history & memory ✅ NEW!
+- Phase 5a.3: Turn history & memory ✅
+- Phase 5a.4: Political combat intelligence ✅ NEW!
 - 152-card Commander staples database ✅
 - Archetype-based deck builder: ramp, control, midrange ✅
 - 4-player Commander setup with 40 life and commander zone ✅

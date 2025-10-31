@@ -1495,3 +1495,281 @@ class GetTurnHistoryTool:
         
         return summary
 
+
+class RecommendCombatTargetsTool:
+    """
+    Recommend which opponents to attack based on threat level, politics, and history.
+    Phase 5a.4: Political Combat Intelligence
+    """
+    
+    def __init__(self):
+        self.game_state: Optional[Any] = None  # Will be set by agent
+    
+    def get_schema(self) -> Dict[str, Any]:
+        """Return tool schema for LLM."""
+        return {
+            "type": "function",
+            "function": {
+                "name": "recommend_combat_targets",
+                "description": "Get recommendations for which opponents to attack during combat. Considers threat levels, political dynamics, recent attacks against you, and strategic elimination opportunities. Use this before declaring attackers to make smart multiplayer decisions.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "attacker_player_id": {
+                            "type": "string",
+                            "description": "ID of the player attacking (optional, defaults to active player)"
+                        },
+                        "available_power": {
+                            "type": "integer",
+                            "description": "Total power of creatures available to attack (optional)"
+                        }
+                    },
+                    "required": []
+                }
+            }
+        }
+    
+    def execute(
+        self,
+        attacker_player_id: Optional[str] = None,
+        available_power: Optional[int] = None,
+        **kwargs: Any  # Absorb extra args from LLM
+    ) -> Dict[str, Any]:
+        """
+        Recommend combat targets based on multiple factors.
+        
+        Args:
+            attacker_player_id: ID of attacking player (defaults to active player)
+            available_power: Total power available to attack
+            
+        Returns:
+            Dictionary with:
+            - success: bool
+            - attacker_id: attacking player ID
+            - targets: list of recommended targets with reasoning
+            - primary_target: best target to focus on
+            - political_advice: strategic guidance
+            - summary: text explanation
+        """
+        if not self.game_state:
+            return {"success": False, "error": "Game state not available"}
+        
+        # Get attacking player
+        if not attacker_player_id:
+            attacker_player_id = self.game_state.active_player_id
+        
+        attacker = self.game_state.get_player(attacker_player_id)
+        if not attacker:
+            return {"success": False, "error": "Attacker not found"}
+        
+        # Get all opponents
+        opponents = self.game_state.get_opponents(attacker_player_id)
+        if not opponents:
+            return {"success": False, "error": "No opponents found"}
+        
+        # Analyze each opponent
+        targets = []
+        for opponent in opponents:
+            analysis = self._analyze_target(attacker, opponent)
+            targets.append(analysis)
+        
+        # Sort by priority score
+        targets.sort(key=lambda x: x["priority_score"], reverse=True)
+        
+        # Get primary target
+        primary_target = targets[0] if targets else None
+        
+        # Generate political advice
+        political_advice = self._generate_political_advice(attacker, targets, available_power)
+        
+        # Generate summary
+        summary = self._generate_summary(targets, primary_target)
+        
+        return {
+            "success": True,
+            "attacker_id": attacker_player_id,
+            "attacker_name": attacker.name,
+            "targets": targets,
+            "primary_target": primary_target,
+            "political_advice": political_advice,
+            "summary": summary
+        }
+    
+    def _analyze_target(self, attacker: Any, opponent: Any) -> Dict[str, Any]:
+        """Analyze a single opponent as a potential combat target."""
+        # Base scores
+        threat_score = self._calculate_threat_score(opponent)
+        vulnerability_score = self._calculate_vulnerability_score(opponent)
+        revenge_score = self._calculate_revenge_score(attacker, opponent)
+        political_score = self._calculate_political_score(opponent, attacker)
+        
+        # Weighted priority
+        priority_score = (
+            threat_score * 0.3 +
+            vulnerability_score * 0.25 +
+            revenge_score * 0.25 +
+            political_score * 0.2
+        )
+        
+        # Generate reasoning
+        reasons = []
+        if threat_score >= 0.7:
+            reasons.append(f"High threat (score: {threat_score:.2f})")
+        if vulnerability_score >= 0.6:
+            reasons.append(f"Vulnerable (low life: {opponent.life})")
+        if revenge_score >= 0.5:
+            reasons.append("Attacked you recently (revenge opportunity)")
+        if political_score >= 0.5:
+            reasons.append("Politically safe target")
+        
+        reasoning = " • ".join(reasons) if reasons else "Neutral target"
+        
+        return {
+            "player_id": opponent.id,
+            "player_name": opponent.name,
+            "life": opponent.life,
+            "threat_score": round(threat_score, 2),
+            "vulnerability_score": round(vulnerability_score, 2),
+            "revenge_score": round(revenge_score, 2),
+            "political_score": round(political_score, 2),
+            "priority_score": round(priority_score, 2),
+            "reasoning": reasoning,
+            "can_eliminate": opponent.life <= 10  # Rough estimate
+        }
+    
+    def _calculate_threat_score(self, opponent: Any) -> float:
+        """Calculate how threatening an opponent is."""
+        score = 0.0
+        
+        # Life advantage
+        if opponent.life >= 35:
+            score += 0.2
+        
+        # Board presence
+        creatures = opponent.creatures_in_play()
+        if len(creatures) >= 3:
+            score += 0.3
+        
+        total_power = sum(c.card.power if c.card.power else 0 for c in creatures)
+        if total_power >= 10:
+            score += 0.3
+        
+        # Hand size (card advantage)
+        if len(opponent.hand) >= 7:
+            score += 0.2
+        
+        return min(1.0, score)
+    
+    def _calculate_vulnerability_score(self, opponent: Any) -> float:
+        """Calculate how vulnerable an opponent is to attack."""
+        score = 0.0
+        
+        # Low life
+        if opponent.life <= 10:
+            score += 0.5
+        elif opponent.life <= 20:
+            score += 0.3
+        elif opponent.life <= 30:
+            score += 0.1
+        
+        # Few or no blockers
+        creatures = opponent.creatures_in_play()
+        if len(creatures) == 0:
+            score += 0.3
+        elif len(creatures) <= 2:
+            score += 0.2
+        
+        return min(1.0, score)
+    
+    def _calculate_revenge_score(self, attacker: Any, opponent: Any) -> float:
+        """Calculate revenge motivation based on recent attack history."""
+        score = 0.0
+        
+        # Check recent attack history
+        recent_history = self.game_state.get_recent_history(last_n_turns=3)
+        
+        # Count attacks from opponent against attacker
+        attacks_against_me = 0
+        for event in recent_history:
+            if event.get("event_type") == "attack" and event.get("player_id") == opponent.id:
+                details = event.get("details", {})
+                targets = details.get("targets", {})
+                if attacker.id in targets:
+                    attacks_against_me += 1
+        
+        # More attacks = more revenge motivation
+        if attacks_against_me >= 2:
+            score = 0.8
+        elif attacks_against_me == 1:
+            score = 0.5
+        
+        return score
+    
+    def _calculate_political_score(self, opponent: Any, attacker: Any) -> float:
+        """Calculate political safety of attacking this opponent."""
+        score = 0.5  # Neutral baseline
+        
+        # It's politically safer to attack opponents who are ahead
+        if opponent.life > attacker.life + 5:
+            score += 0.2
+        
+        # It's politically risky to attack opponents who are far behind
+        if opponent.life < attacker.life - 10:
+            score -= 0.3
+        
+        return max(0.0, min(1.0, score))
+    
+    def _generate_political_advice(
+        self,
+        attacker: Any,
+        targets: List[Dict[str, Any]],
+        available_power: Optional[int]
+    ) -> str:
+        """Generate political guidance for combat."""
+        if not targets:
+            return "No valid targets available."
+        
+        primary = targets[0]
+        
+        advice = []
+        
+        # Threat-based advice
+        if primary["threat_score"] >= 0.7:
+            advice.append(f"⚔️ {primary['player_name']} is the biggest threat - attacking them is politically justified")
+        
+        # Elimination opportunity
+        if primary["can_eliminate"] and available_power and available_power >= primary["life"]:
+            advice.append(f"💀 You can eliminate {primary['player_name']} ({primary['life']} life) - removing a player is always valuable")
+        
+        # Revenge advice
+        if primary["revenge_score"] >= 0.5:
+            advice.append(f"🎯 {primary['player_name']} attacked you recently - retaliation sends a strong message")
+        
+        # Multi-target spread advice
+        if len(targets) >= 3 and all(t["priority_score"] > 0.4 for t in targets[:3]):
+            advice.append("🔀 Consider spreading damage across multiple opponents to avoid becoming the archenemy")
+        
+        # Conservative advice if attacker is ahead
+        if attacker.life >= 35:
+            advice.append("⚠️ You're ahead on life - be careful not to make yourself the biggest threat")
+        
+        return " | ".join(advice) if advice else "No specific political considerations."
+    
+    def _generate_summary(
+        self,
+        targets: List[Dict[str, Any]],
+        primary_target: Optional[Dict[str, Any]]
+    ) -> str:
+        """Generate human-readable summary."""
+        if not primary_target:
+            return "No valid combat targets available."
+        
+        summary = f"🎯 **Primary Target**: {primary_target['player_name']} (priority: {primary_target['priority_score']:.2f})"
+        summary += f"\n   Reason: {primary_target['reasoning']}"
+        
+        if len(targets) > 1:
+            secondary = targets[1]
+            summary += f"\n🥈 **Secondary**: {secondary['player_name']} (priority: {secondary['priority_score']:.2f})"
+        
+        return summary
+

@@ -69,8 +69,8 @@ class TestHeuristicIntegration:
             verbose=False
         )
         
-        # Verify all tools are available (including new trigger inspection)
-        assert len(agent.tools) == 11
+        # Verify all tools are available (updated: Phase 5a.4 adds combat intelligence)
+        assert len(agent.tools) == 13
         assert "can_i_win" in agent.tools
         assert "recommend_strategy" in agent.tools
         assert "analyze_opponent" in agent.tools

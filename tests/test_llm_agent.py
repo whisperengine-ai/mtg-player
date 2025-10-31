@@ -44,7 +44,8 @@ def test_agent_initialization_no_llm(game_setup):
     
     assert agent.game_state == game_state
     assert agent.rules_engine == rules_engine
-    assert len(agent.tools) == 12  # Updated: includes get_stack_state, can_respond, get_pending_triggers, evaluate_position, can_i_win, recommend_strategy, analyze_opponent, get_turn_history
+    # Should have 13 tools after Phase 5a.4
+    assert len(agent.tools) == 13
     assert "get_game_state" in agent.tools
     assert "get_legal_actions" in agent.tools
     assert "execute_action" in agent.tools
@@ -217,7 +218,7 @@ def test_llm_tool_schemas(game_setup):
     agent = MTGAgent(game_state, rules_engine, verbose=False)
     schemas = agent._get_tool_schemas()
     
-    assert len(schemas) == 12  # Updated: includes get_stack_state, can_respond, get_pending_triggers, evaluate_position, can_i_win, recommend_strategy, analyze_opponent, get_turn_history
+    assert len(schemas) == 13  # Updated: Phase 5a.4 adds recommend_combat_targets
     
     # Check each schema has required fields
     for schema in schemas:
