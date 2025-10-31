@@ -706,3 +706,82 @@ class CanRespondTool(Tool):
         
         return f"You have {len(castable_instants)} castable instant(s) and priority."
 
+
+class GetPendingTriggersTool(Tool):
+    """List triggers that are pending (queued or on the stack)."""
+    game_state: Optional[Any] = None
+    rules_engine: Optional[Any] = None
+
+    def __init__(self, **data):
+        super().__init__(
+            name="get_pending_triggers",
+            description=(
+                "List triggered abilities that are waiting (queued by events like ETB or dies) "
+                "and abilities already on the stack. Shows controller, source, and effect text."
+            ),
+            **data
+        )
+
+    def execute(self, **_kwargs) -> Dict[str, Any]:
+        if not self.game_state or not self.rules_engine:
+            return {"error": "Game not initialized"}
+
+        results: List[Dict[str, Any]] = []
+
+        # 1) Triggers currently queued but not yet on the stack
+        try:
+            queued = self.rules_engine.trigger_queue.get_all()
+        except Exception:
+            queued = []
+
+        for qt in queued:
+            controller = self.game_state.get_player(qt.controller_id)
+            results.append({
+                "location": "queue",
+                "controller_id": qt.controller_id,
+                "controller": controller.name if controller else qt.controller_id,
+                "source_id": qt.source_id,
+                "source_name": qt.source_name,
+                "effect": str(qt.ability),
+                "requires_target": getattr(qt.ability.effect, "requires_target", False),
+                "chosen_targets": list(getattr(qt, "chosen_targets", [])),
+            })
+
+        # 2) Abilities already on the stack
+        stack = self.rules_engine.stack
+        for obj in stack.get_all():
+            if getattr(obj, "object_type", None) and obj.object_type.value == "ability":
+                controller = self.game_state.get_player(obj.controller_id)
+                # Try to derive source name from battlefield if available
+                source_name = None
+                if getattr(obj, "ability_source_id", None):
+                    for p in self.game_state.players:
+                        for perm in p.battlefield:
+                            if perm.instance_id == obj.ability_source_id:
+                                source_name = perm.card.name
+                                break
+                        if source_name:
+                            break
+                results.append({
+                    "location": "stack",
+                    "controller_id": obj.controller_id,
+                    "controller": controller.name if controller else obj.controller_id,
+                    "source_id": getattr(obj, "ability_source_id", None),
+                    "source_name": source_name,
+                    "effect": obj.ability_text,
+                    "targets": list(getattr(obj, "targets", [])),
+                    "can_be_countered": getattr(obj, "can_be_countered", True),
+                })
+
+        active_player = self.game_state.get_active_player()
+        priority_player_id = stack.get_priority_player()
+
+        return {
+            "success": True,
+            "count": len(results),
+            "triggers": results,
+            "stack_size": stack.size(),
+            "priority_player_id": priority_player_id,
+            "you_have_priority": active_player and priority_player_id == active_player.id,
+        }
+
