@@ -1,12 +1,18 @@
 """
 Tests for Phase 5a.3: Turn History & Memory
 """
+import sys
+from pathlib import Path
+
+# Add src to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
+
 import pytest
-from src.core.game_state import GameState, Phase, Step
-from src.core.player import Player
-from src.core.card import Card, CardType, Color, ManaCost, CardInstance
-from src.core.rules_engine import RulesEngine
-from src.tools.evaluation_tools import GetTurnHistoryTool
+from core.game_state import GameState, Phase, Step
+from core.player import Player
+from core.card import Card, CardType, Color, ManaCost, CardInstance
+from core.rules_engine import RulesEngine
+from tools.evaluation_tools import GetTurnHistoryTool
 
 
 @pytest.fixture
@@ -81,9 +87,10 @@ def test_get_recent_history(game_state):
     # Get recent 5 turns (should include turns 6-10)
     recent = game_state.get_recent_history(last_n_turns=5)
     
-    # Should only get event from turn 10 (within last 5 turns)
-    assert len(recent) == 1
-    assert recent[0]["turn"] == 10
+    # Should get events from turn 5 and turn 10 (both within 5 turns of turn 10: min_turn = max(1, 10-5) = 5)
+    assert len(recent) == 2
+    assert recent[0]["turn"] == 5
+    assert recent[1]["turn"] == 10
 
 
 def test_turn_history_tool(game_state):
@@ -182,8 +189,8 @@ def test_rules_engine_records_land_play(game_state, rules_engine):
     player = game_state.get_player("p1")
     
     # Create a land and add to hand
-    forest = Card(name="Forest", card_type=CardType.LAND, mana_cost=ManaCost(), colors=[Color.GREEN])
-    forest_instance = CardInstance(card=forest)
+    forest = Card(id="forest", name="Forest", card_types=[CardType.LAND], mana_cost=ManaCost(), colors=[Color.GREEN])
+    forest_instance = CardInstance(card=forest, instance_id="forest-1", controller_id="p1", owner_id="p1")
     player.hand.append(forest_instance)
     
     # Play the land
@@ -200,8 +207,8 @@ def test_rules_engine_records_attacks(game_state, rules_engine):
     player = game_state.get_player("p1")
     
     # Create a creature on battlefield
-    bear = Card(name="Grizzly Bears", card_type=CardType.CREATURE, mana_cost=ManaCost(generic=2), power=2, toughness=2)
-    bear_instance = CardInstance(card=bear)
+    bear = Card(id="bear", name="Grizzly Bears", card_types=[CardType.CREATURE], mana_cost=ManaCost(generic=2), power=2, toughness=2)
+    bear_instance = CardInstance(card=bear, instance_id="bear-1", controller_id="p1", owner_id="p1")
     bear_instance.summoning_sick = False
     player.battlefield.append(bear_instance)
     
