@@ -292,8 +292,12 @@ class MTGAgent:
         phase_prompt = self._get_phase_specific_prompt()
         self.messages.append({"role": "user", "content": phase_prompt})
         
+        # Track consecutive errors for circuit breaker
+        consecutive_errors = 0
+        max_consecutive_errors = 3
+        
         try:
-            max_iterations = 5
+            max_iterations = 3  # Reduced from 5: 1 for analysis, 1 for strategy, 1 for action
             for iteration in range(max_iterations):
                 if self.verbose:
                     print(f"🤖 LLM Iteration {iteration + 1}/{max_iterations}")
@@ -454,6 +458,34 @@ class MTGAgent:
                             try:
                                 result = tool.execute(**function_args)
                                 
+                                # Check for common player ID errors and provide helpful feedback
+                                if isinstance(result, dict) and "error" in result:
+                                    error_msg = result["error"]
+                                    # Detect player ID format errors
+                                    if "not found" in error_msg.lower():
+                                        consecutive_errors += 1
+                                        if consecutive_errors >= max_consecutive_errors:
+                                            if self.verbose:
+                                                print(f"🔴 Too many consecutive errors ({consecutive_errors}). Forcing pass.")
+                                            # Add circuit breaker message
+                                            tool_results.append({
+                                                "role": "tool",
+                                                "tool_call_id": tool_call.id,
+                                                "content": json.dumps({
+                                                    "error": "Too many errors. Please call get_game_state() to see correct player IDs (use player_1, player_2, etc. with underscores)",
+                                                    "hint": "STOP trying the same thing. Check game state first."
+                                                })
+                                            })
+                                            break  # Exit tool loop
+                                        
+                                        # Add helpful hint about player IDs
+                                        if any(bad_id in error_msg for bad_id in ["player1", "player2", "player3", "player4"]):
+                                            result["hint"] = "🚨 Player IDs use underscores: player_1, player_2, player_3, player_4 (not player1, player2, etc.)"
+                                    else:
+                                        consecutive_errors = 0  # Reset on non-"not found" errors
+                                else:
+                                    consecutive_errors = 0  # Reset on success
+                                
                                 # Log tool execution
                                 if self.llm_logger:
                                     self.llm_logger.log_tool_execution(function_name, function_args, result)
@@ -471,6 +503,7 @@ class MTGAgent:
                                     "content": json.dumps(result)
                                 })
                             except Exception as e:
+                                consecutive_errors += 1
                                 if self.verbose:
                                     print(f"⚠️  Tool execution error: {e}")
                                 tool_results.append({

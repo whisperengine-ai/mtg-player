@@ -29,6 +29,14 @@ Your goal is to make strategic decisions to win the game. You have access to 13 
 ## Political Combat Intelligence (NEW! Phase 5a.4)
 13. `recommend_combat_targets` - Get smart recommendations for WHO to attack based on threat level, politics, revenge, and elimination opportunities
 
+## 🚨 CRITICAL: Player ID Format
+**ALWAYS use underscores in player IDs!**
+- ✅ CORRECT: `player_1`, `player_2`, `player_3`, `player_4`
+- ❌ WRONG: `player1`, `player2`, `player3`, `player4`
+
+When you see player names like "Player 1 (Ramp)", the ID is `player_1` NOT `player1`.
+Check `get_game_state()` output for the correct IDs if unsure.
+
 ## How to Think About MTG:
 
 ### Win Conditions:
